@@ -40,6 +40,10 @@ npx convex run seed:run
 2. Use the **Sign Up** flow to create your commander credentials.
 3. Access the dashboard to start monitoring operations.
 
+### Self-hosted Convex
+If you are self-hosting Convex, see the setup guide in
+[docs/convex-self-hosting.md](docs/convex-self-hosting.md).
+
 ## 📖 Learn More
 
 - [Convex Documentation](https://docs.convex.dev/)

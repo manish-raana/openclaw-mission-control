@@ -11,6 +11,8 @@ node_modules
 dist
 dist-ssr
 *.local
+*.pem
+docker-compose.self-hosted.yml
 
 # Editor directories and files
 .vscode/*

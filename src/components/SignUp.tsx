@@ -2,15 +2,39 @@ import { useAuthActions } from "@convex-dev/auth/react";
 import { IconEye, IconEyeOff } from "@tabler/icons-react";
 import { useState } from "react";
 
-type SignInFormProps = {
-	onShowSignUp?: () => void;
+type SignUpFormProps = {
+	onShowSignIn?: () => void;
 };
 
-function SignInForm({ onShowSignUp }: SignInFormProps) {
+function SignUpForm({ onShowSignIn }: SignUpFormProps) {
 	const { signIn } = useAuthActions();
 	const [error, setError] = useState<string | null>(null);
 	const [showPassword, setShowPassword] = useState(false);
 	const [isLoading, setIsLoading] = useState(false);
+
+	const handleSignUp = async (formData: FormData) => {
+		formData.set("flow", "signUp");
+		const result = await signIn("password", formData);
+		if (result.signingIn) {
+			const email = formData.get("email");
+			const password = formData.get("password");
+			if (typeof email === "string" && typeof password === "string") {
+				const signInData = new FormData();
+				signInData.set("flow", "signIn");
+				signInData.set("email", email);
+				signInData.set("password", password);
+				await signIn("password", signInData);
+			} else {
+				setError("Account created. Please sign in.");
+			}
+		}
+	};
+
+	const errorMessage = error?.includes("already exists")
+		? "That email already exists. Try signing in instead."
+		: error
+			? "Unable to create credentials."
+			: null;
 
 	return (
 		<div className="flex min-h-screen items-center justify-center bg-background p-4 font-sans">
@@ -25,7 +49,7 @@ function SignInForm({ onShowSignUp }: SignInFormProps) {
 						Mission Control
 					</h1>
 					<p className="mt-2 text-sm text-muted-foreground font-medium">
-						Welcome back, Commander.
+						Create your commander credentials.
 					</p>
 				</div>
 
@@ -37,11 +61,9 @@ function SignInForm({ onShowSignUp }: SignInFormProps) {
 							setError(null);
 							setIsLoading(true);
 							try {
-								const formData = new FormData(e.target as HTMLFormElement);
-								formData.set("flow", "signIn");
-								await signIn("password", formData);
+								await handleSignUp(new FormData(e.target as HTMLFormElement));
 							} catch (err) {
-								setError(err instanceof Error ? err.message : "Sign in failed");
+								setError(err instanceof Error ? err.message : "Sign up failed");
 							} finally {
 								setIsLoading(false);
 							}
@@ -65,7 +87,7 @@ function SignInForm({ onShowSignUp }: SignInFormProps) {
 									required
 								/>
 							</div>
-							<div className="space-y-1.5 ">
+							<div className="space-y-1.5">
 								<label
 									className="text-xs font-bold uppercase tracking-widest text-muted-foreground ml-1"
 									htmlFor="password"
@@ -77,7 +99,7 @@ function SignInForm({ onShowSignUp }: SignInFormProps) {
 										id="password"
 										className="w-full bg-background text-foreground rounded-lg p-3 border border-border focus:border-[var(--accent-orange)] focus:ring-1 focus:ring-[var(--accent-orange)] outline-none transition-all placeholder:text-muted-foreground/50"
 										type={showPassword ? "text" : "password"}
-										autoComplete="current-password"
+										autoComplete="new-password"
 										name="password"
 										placeholder="••••••••"
 										required
@@ -102,26 +124,26 @@ function SignInForm({ onShowSignUp }: SignInFormProps) {
 							type="submit"
 							disabled={isLoading}
 						>
-							{isLoading ? "Authenticating..." : "Execute Login"}
+							{isLoading ? "Creating..." : "Create Account"}
 						</button>
 
 						<div className="text-center text-xs text-muted-foreground">
-							<span className="mr-2">New to Mission Control?</span>
+							<span className="mr-2">Already have credentials?</span>
 							<button
 								type="button"
-								onClick={onShowSignUp}
+								onClick={onShowSignIn}
 								className="font-semibold text-foreground hover:text-[var(--accent-orange)] transition-colors"
 							>
-								Create credentials
+								Return to Sign In
 							</button>
 						</div>
 
-						{error && (
+						{errorMessage && (
 							<div className="mt-4 animate-in fade-in slide-in-from-top-2">
 								<div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4 flex items-start gap-3">
 									<span className="text-destructive text-lg">⚠️</span>
 									<p className="text-foreground/80 font-mono text-xs leading-relaxed pt-1">
-										Invalid credentials provided.
+										{errorMessage}
 									</p>
 								</div>
 							</div>
@@ -133,4 +155,4 @@ function SignInForm({ onShowSignUp }: SignInFormProps) {
 	);
 }
 
-export default SignInForm;
+export default SignUpForm;
