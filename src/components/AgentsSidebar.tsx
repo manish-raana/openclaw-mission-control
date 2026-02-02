@@ -7,7 +7,7 @@ const AgentsSidebar: React.FC = () => {
 
 	if (agents === undefined) {
 		return (
-			<aside className="[grid-area:left-sidebar] bg-white border-r border-border flex flex-col overflow-hidden animate-pulse">
+			<aside className="[grid-area:left-sidebar] bg-card border-r border-border flex flex-col overflow-hidden animate-pulse">
 				<div className="px-6 py-5 border-b border-border h-[65px] bg-muted/20" />
 				<div className="flex-1 space-y-4 p-6">
 					{[...Array(8)].map((_, i) => (
@@ -25,7 +25,7 @@ const AgentsSidebar: React.FC = () => {
 	}
 
 	return (
-		<aside className="[grid-area:left-sidebar] bg-white border-r border-border flex flex-col overflow-hidden">
+		<aside className="[grid-area:left-sidebar] bg-card border-r border-border flex flex-col overflow-hidden">
 			<div className="flex items-center justify-between px-6 py-5 border-b border-border">
 				<div className="text-[11px] font-bold tracking-widest text-muted-foreground flex items-center gap-2">
 					<span className="w-1.5 h-1.5 bg-[var(--accent-green)] rounded-full" />{" "}
@@ -38,11 +38,8 @@ const AgentsSidebar: React.FC = () => {
 
 			<div className="flex-1 overflow-y-auto py-3">
 				{agents.map((agent) => (
-					<div
-						key={agent._id}
-						className="flex items-center gap-3 px-6 py-3 cursor-pointer hover:bg-muted transition-colors group"
-					>
-						<div className="w-10 h-10 bg-muted rounded-full flex items-center justify-center text-xl border border-border group-hover:bg-white transition-colors">
+					<div key={agent._id} className="flex items-center gap-3 px-6 py-3">
+						<div className="w-10 h-10 bg-muted rounded-full flex items-center justify-center text-xl border border-border">
 							{agent.avatar}
 						</div>
 						<div className="flex-1">
