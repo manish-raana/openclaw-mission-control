@@ -74,10 +74,17 @@ export default function App() {
 						onClose={() => setIsRightSidebarOpen(false)}
 					/>
           {selectedTaskId && (
-						<TaskDetailPanel 
-							taskId={selectedTaskId} 
-							onClose={() => setSelectedTaskId(null)} 
-						/>
+						<>
+							<div
+								className="fixed inset-0 z-40"
+								onClick={() => setSelectedTaskId(null)}
+								aria-hidden="true"
+							/>
+							<TaskDetailPanel
+								taskId={selectedTaskId}
+								onClose={() => setSelectedTaskId(null)}
+							/>
+						</>
 					)}
 				</main>
 			</Authenticated>
