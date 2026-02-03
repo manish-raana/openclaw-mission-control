@@ -31,17 +31,26 @@ const DocumentPreviewTray: React.FC<DocumentPreviewTrayProps> = ({
   const renderContent = () => {
     const { type, content } = documentContext;
 
-    // Image - check if content is a URL or base64
+    // Image - render from URL, data URI, or local file path
     if (type === "image") {
-      const isUrl =
+      let imgSrc: string | null = null;
+
+      if (
         content.startsWith("http://") ||
         content.startsWith("https://") ||
-        content.startsWith("data:");
-      if (isUrl) {
+        content.startsWith("data:")
+      ) {
+        imgSrc = content;
+      } else if (content.startsWith("/")) {
+        // Local file path — serve via Vite dev server
+        imgSrc = `/api/local-file?path=${encodeURIComponent(content)}`;
+      }
+
+      if (imgSrc) {
         return (
           <div className="flex items-center justify-center p-4">
             <img
-              src={content}
+              src={imgSrc}
               alt={documentContext.title}
               className="max-w-full max-h-[60vh] object-contain rounded-lg shadow-md"
             />
