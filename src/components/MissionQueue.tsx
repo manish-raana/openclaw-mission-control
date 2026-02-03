@@ -1,7 +1,50 @@
-import React from "react";
-import { useQuery } from "convex/react";
+import React, { useState } from "react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
+import {
+	DndContext,
+	DragOverlay,
+	PointerSensor,
+	useSensor,
+	useSensors,
+	DragStartEvent,
+	DragEndEvent,
+} from "@dnd-kit/core";
+import TaskCard from "./TaskCard";
+import KanbanColumn from "./KanbanColumn";
+
+type TaskStatus = "inbox" | "assigned" | "in_progress" | "review" | "done";
+
+interface Task {
+	_id: Id<"tasks">;
+	title: string;
+	description: string;
+	status: string;
+	assigneeIds: Id<"agents">[];
+	tags: string[];
+	borderColor?: string;
+	lastMessageTime?: number;
+}
+
+function formatRelativeTime(timestamp: number | null): string {
+	if (!timestamp) return "";
+
+	const now = Date.now();
+	const diff = now - timestamp;
+
+	const seconds = Math.floor(diff / 1000);
+	const minutes = Math.floor(seconds / 60);
+	const hours = Math.floor(minutes / 60);
+	const days = Math.floor(hours / 24);
+
+	if (seconds < 60) return "just now";
+	if (minutes < 60) return `${minutes}m ago`;
+	if (hours < 24) return `${hours}h ago`;
+	if (days < 7) return `${days}d ago`;
+
+	return new Date(timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
 
 const columns = [
 	{ id: "inbox", label: "INBOX", color: "var(--text-subtle)" },
@@ -19,6 +62,18 @@ interface MissionQueueProps {
 const MissionQueue: React.FC<MissionQueueProps> = ({ selectedTaskId, onSelectTask }) => {
 	const tasks = useQuery(api.queries.listTasks);
 	const agents = useQuery(api.queries.listAgents);
+	const updateStatus = useMutation(api.tasks.updateStatus);
+	const [activeTask, setActiveTask] = useState<Task | null>(null);
+
+	const currentUserAgent = agents?.find(a => a.name === "Manish");
+
+	const sensors = useSensors(
+		useSensor(PointerSensor, {
+			activationConstraint: {
+				distance: 8, // 8px movement required to start drag
+			},
+		})
+	);
 
 	if (tasks === undefined || agents === undefined) {
 		return (
@@ -35,6 +90,32 @@ const MissionQueue: React.FC<MissionQueueProps> = ({ selectedTaskId, onSelectTas
 
 	const getAgentName = (id: string) => {
 		return agents.find((a) => a._id === id)?.name || "Unknown";
+	};
+
+	const handleDragStart = (event: DragStartEvent) => {
+		const task = tasks.find((t) => t._id === event.active.id);
+		if (task) {
+			setActiveTask(task as Task);
+		}
+	};
+
+	const handleDragEnd = async (event: DragEndEvent) => {
+		const { active, over } = event;
+		setActiveTask(null);
+
+		if (!over || !currentUserAgent) return;
+
+		const taskId = active.id as Id<"tasks">;
+		const newStatus = over.id as TaskStatus;
+		const task = tasks.find((t) => t._id === taskId);
+
+		if (task && task.status !== newStatus) {
+			await updateStatus({
+				taskId,
+				status: newStatus,
+				agentId: currentUserAgent._id,
+			});
+		}
 	};
 
 	return (
@@ -55,82 +136,50 @@ const MissionQueue: React.FC<MissionQueueProps> = ({ selectedTaskId, onSelectTas
 				</div>
 			</div>
 
-			<div className="flex-1 grid grid-cols-5 gap-px bg-border overflow-x-auto">
-				{columns.map((col) => (
-					<div
-						key={col.id}
-						className="bg-secondary flex flex-col min-w-[250px]"
-					>
-						<div className="flex items-center gap-2 px-4 py-3 bg-[#f8f9fa] border-b border-border">
-							<span
-								className="w-2 h-2 rounded-full"
-								style={{ backgroundColor: col.color }}
-							/>
-							<span className="text-[10px] font-bold text-muted-foreground flex-1 uppercase tracking-tighter">
-								{col.label}
-							</span>
-							<span className="text-[10px] text-muted-foreground bg-border px-1.5 py-0.25 rounded-full">
-								{tasks.filter((t) => t.status === col.id).length}
-							</span>
-						</div>
-						<div className="flex-1 p-3 flex flex-col gap-3 overflow-y-auto">
+			<DndContext
+				sensors={sensors}
+				onDragStart={handleDragStart}
+				onDragEnd={handleDragEnd}
+			>
+				<div className="flex-1 grid grid-cols-5 gap-px bg-border overflow-x-auto">
+					{columns.map((col) => (
+						<KanbanColumn
+							key={col.id}
+							column={col}
+							taskCount={tasks.filter((t) => t.status === col.id).length}
+						>
 							{tasks
 								.filter((t) => t.status === col.id)
-								.map((task) => {
-									const isSelected = selectedTaskId === task._id;
-									return (
-										<div
-											key={task._id}
-											onClick={() => onSelectTask(task._id)}
-											className={`bg-white rounded-lg p-4 shadow-sm flex flex-col gap-3 border transition-all hover:-translate-y-0.5 hover:shadow-md cursor-pointer ${
-												isSelected 
-													? "ring-2 ring-[var(--accent-blue)] border-transparent" 
-													: "border-border"
-											}`}
-											style={{
-												borderLeft: isSelected ? undefined : `4px solid ${task.borderColor || "transparent"}`,
-											}}
-										>
-											<div className="flex justify-between text-muted-foreground text-sm">
-												<span className="text-base">↑</span>
-												<span className="tracking-widest">...</span>
-											</div>
-											<h3 className="text-sm font-semibold text-foreground leading-tight">
-												{task.title}
-											</h3>
-											<p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">
-												{task.description}
-											</p>
-											<div className="flex justify-between items-center mt-1">
-												{task.assigneeIds && task.assigneeIds.length > 0 && (
-													<div className="flex items-center gap-1.5">
-														<span className="text-xs">👤</span>
-														<span className="text-[11px] font-semibold text-foreground">
-															{getAgentName(task.assigneeIds[0] as string)}
-														</span>
-													</div>
-												)}
-												<span className="text-[11px] text-muted-foreground">
-													just now
-												</span>
-											</div>
-											<div className="flex flex-wrap gap-1.5">
-												{task.tags.map((tag) => (
-													<span
-														key={tag}
-														className="text-[10px] px-2 py-0.5 bg-muted rounded font-medium text-muted-foreground"
-													>
-														{tag}
-													</span>
-												))}
-											</div>
-										</div>
-									);
-								})}
-						</div>
-					</div>
-				))}
-			</div>
+								.map((task) => (
+									<TaskCard
+										key={task._id}
+										task={task as Task}
+										isSelected={selectedTaskId === task._id}
+										onClick={() => onSelectTask(task._id)}
+										getAgentName={getAgentName}
+										formatRelativeTime={formatRelativeTime}
+										columnId={col.id}
+										currentUserAgentId={currentUserAgent?._id}
+									/>
+								))}
+						</KanbanColumn>
+					))}
+				</div>
+
+				<DragOverlay>
+					{activeTask ? (
+						<TaskCard
+							task={activeTask}
+							isSelected={false}
+							onClick={() => {}}
+							getAgentName={getAgentName}
+							formatRelativeTime={formatRelativeTime}
+							columnId={activeTask.status}
+							isOverlay={true}
+						/>
+					) : null}
+				</DragOverlay>
+			</DndContext>
 		</main>
 	);
 };
