@@ -1,7 +1,8 @@
-import React from "react";
-import { useQuery } from "convex/react";
+import React, { useState } from "react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
+import { IconArchive } from "@tabler/icons-react";
 
 function formatRelativeTime(timestamp: number | null): string {
 	if (!timestamp) return "";
@@ -30,6 +31,8 @@ const columns = [
 	{ id: "done", label: "DONE", color: "var(--accent-green)" },
 ];
 
+const archivedColumn = { id: "archived", label: "ARCHIVED", color: "var(--text-subtle)" };
+
 interface MissionQueueProps {
 	selectedTaskId: Id<"tasks"> | null;
 	onSelectTask: (id: Id<"tasks">) => void;
@@ -38,6 +41,10 @@ interface MissionQueueProps {
 const MissionQueue: React.FC<MissionQueueProps> = ({ selectedTaskId, onSelectTask }) => {
 	const tasks = useQuery(api.queries.listTasks);
 	const agents = useQuery(api.queries.listAgents);
+	const archiveTask = useMutation(api.tasks.archiveTask);
+	const [showArchived, setShowArchived] = useState(false);
+
+	const currentUserAgent = agents?.find(a => a.name === "Manish");
 
 	if (tasks === undefined || agents === undefined) {
 		return (
@@ -56,6 +63,9 @@ const MissionQueue: React.FC<MissionQueueProps> = ({ selectedTaskId, onSelectTas
 		return agents.find((a) => a._id === id)?.name || "Unknown";
 	};
 
+	const displayColumns = showArchived ? [...columns, archivedColumn] : columns;
+	const archivedCount = tasks.filter((t) => t.status === "archived").length;
+
 	return (
 		<main className="[grid-area:main] bg-secondary flex flex-col overflow-hidden">
 			<div className="flex items-center justify-between px-6 py-5 bg-white border-b border-border">
@@ -69,13 +79,29 @@ const MissionQueue: React.FC<MissionQueueProps> = ({ selectedTaskId, onSelectTas
 						{tasks.filter((t) => t.status === "inbox").length}
 					</div>
 					<div className="text-[11px] font-semibold px-3 py-1 rounded bg-[#f0f0f0] text-[#999]">
-						{tasks.filter((t) => t.status !== "done").length} active
+						{tasks.filter((t) => t.status !== "done" && t.status !== "archived").length} active
 					</div>
+					<button
+						onClick={() => setShowArchived(!showArchived)}
+						className={`text-[11px] font-semibold px-3 py-1 rounded flex items-center gap-1.5 transition-colors ${
+							showArchived
+								? "bg-[var(--accent-blue)] text-white"
+								: "bg-[#f0f0f0] text-[#999] hover:bg-[#e5e5e5]"
+						}`}
+					>
+						<IconArchive size={14} />
+						{showArchived ? "Hide Archived" : "Show Archived"}
+						{archivedCount > 0 && (
+							<span className={`px-1.5 rounded-full text-[10px] ${showArchived ? "bg-white/20" : "bg-[#d0d0d0]"}`}>
+								{archivedCount}
+							</span>
+						)}
+					</button>
 				</div>
 			</div>
 
-			<div className="flex-1 grid grid-cols-5 gap-px bg-border overflow-x-auto">
-				{columns.map((col) => (
+			<div className={`flex-1 grid gap-px bg-border overflow-x-auto ${showArchived ? "grid-cols-6" : "grid-cols-5"}`}>
+				{displayColumns.map((col) => (
 					<div
 						key={col.id}
 						className="bg-secondary flex flex-col min-w-[250px]"
@@ -102,17 +128,31 @@ const MissionQueue: React.FC<MissionQueueProps> = ({ selectedTaskId, onSelectTas
 											key={task._id}
 											onClick={() => onSelectTask(task._id)}
 											className={`bg-white rounded-lg p-4 shadow-sm flex flex-col gap-3 border transition-all hover:-translate-y-0.5 hover:shadow-md cursor-pointer ${
-												isSelected 
-													? "ring-2 ring-[var(--accent-blue)] border-transparent" 
+												isSelected
+													? "ring-2 ring-[var(--accent-blue)] border-transparent"
 													: "border-border"
-											}`}
+											} ${col.id === "archived" ? "opacity-60" : ""}`}
 											style={{
 												borderLeft: isSelected ? undefined : `4px solid ${task.borderColor || "transparent"}`,
 											}}
 										>
 											<div className="flex justify-between text-muted-foreground text-sm">
 												<span className="text-base">↑</span>
-												<span className="tracking-widest">...</span>
+												<div className="flex items-center gap-2">
+													{col.id === "done" && currentUserAgent && (
+														<button
+															onClick={(e) => {
+																e.stopPropagation();
+																archiveTask({ taskId: task._id, agentId: currentUserAgent._id });
+															}}
+															className="p-1 hover:bg-muted rounded transition-colors text-muted-foreground hover:text-foreground"
+															title="Archive task"
+														>
+															<IconArchive size={14} />
+														</button>
+													)}
+													<span className="tracking-widest">...</span>
+												</div>
 											</div>
 											<h3 className="text-sm font-semibold text-foreground leading-tight">
 												{task.title}

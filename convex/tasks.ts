@@ -9,7 +9,8 @@ export const updateStatus = mutation({
       v.literal("assigned"),
       v.literal("in_progress"),
       v.literal("review"),
-      v.literal("done")
+      v.literal("done"),
+      v.literal("archived")
     ),
     agentId: v.id("agents"),
   },
@@ -67,6 +68,26 @@ export const createTask = mutation({
       borderColor: args.borderColor,
     });
     return taskId;
+  },
+});
+
+export const archiveTask = mutation({
+  args: {
+    taskId: v.id("tasks"),
+    agentId: v.id("agents"),
+  },
+  handler: async (ctx, args) => {
+    const task = await ctx.db.get(args.taskId);
+    if (!task) throw new Error("Task not found");
+
+    await ctx.db.patch(args.taskId, { status: "archived" });
+
+    await ctx.db.insert("activities", {
+      type: "status_update",
+      agentId: args.agentId,
+      message: `archived "${task.title}"`,
+      targetId: args.taskId,
+    });
   },
 });
 

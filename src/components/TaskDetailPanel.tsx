@@ -2,7 +2,7 @@ import React, { useMemo, useState, useEffect } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
-import { IconX, IconCheck, IconUser, IconTag, IconMessage, IconClock, IconFileText, IconCopy, IconCalendar } from "@tabler/icons-react";
+import { IconX, IconCheck, IconUser, IconTag, IconMessage, IconClock, IconFileText, IconCopy, IconCalendar, IconArchive } from "@tabler/icons-react";
 import ReactMarkdown from "react-markdown";
 
 interface TaskDetailPanelProps {
@@ -16,6 +16,7 @@ const statusColors: Record<string, string> = {
   in_progress: "var(--accent-blue)",
   review: "var(--text-main)",
   done: "var(--accent-green)",
+  archived: "var(--text-subtle)",
 };
 
 const statusLabels: Record<string, string> = {
@@ -24,6 +25,7 @@ const statusLabels: Record<string, string> = {
   in_progress: "IN PROGRESS",
   review: "REVIEW",
   done: "DONE",
+  archived: "ARCHIVED",
 };
 
 const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ taskId, onClose }) => {
@@ -36,6 +38,7 @@ const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ taskId, onClose }) =>
   const updateStatus = useMutation(api.tasks.updateStatus);
   const updateAssignees = useMutation(api.tasks.updateAssignees);
   const updateTask = useMutation(api.tasks.updateTask);
+  const archiveTask = useMutation(api.tasks.archiveTask);
   const sendMessage = useMutation(api.messages.send);
   const createDocument = useMutation(api.documents.create);
 
@@ -208,18 +211,31 @@ const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ taskId, onClose }) =>
             ))}
           </div>
           
-          {/* Quick Action: Mark as Done */}
-          {task.status !== 'done' && (
-            <button
-                onClick={() => currentUserAgent && updateStatus({ taskId: task._id, status: 'done', agentId: currentUserAgent._id })}
-                disabled={!currentUserAgent}
-                className={`w-full py-1.5 bg-[var(--accent-green)] text-white rounded text-xs font-medium flex items-center justify-center gap-2 transition-opacity shadow-sm ${!currentUserAgent ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'}`}
-                title={!currentUserAgent ? "User agent not found" : "Mark as Done"}
-            >
-                <IconCheck size={16} />
-                Mark as Done
-            </button>
-          )}
+          {/* Quick Actions */}
+          <div className="flex gap-2">
+            {task.status !== 'done' && task.status !== 'archived' && (
+              <button
+                  onClick={() => currentUserAgent && updateStatus({ taskId: task._id, status: 'done', agentId: currentUserAgent._id })}
+                  disabled={!currentUserAgent}
+                  className={`flex-1 py-1.5 bg-[var(--accent-green)] text-white rounded text-xs font-medium flex items-center justify-center gap-2 transition-opacity shadow-sm ${!currentUserAgent ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'}`}
+                  title={!currentUserAgent ? "User agent not found" : "Mark as Done"}
+              >
+                  <IconCheck size={16} />
+                  Mark as Done
+              </button>
+            )}
+            {task.status !== 'archived' && (
+              <button
+                  onClick={() => currentUserAgent && archiveTask({ taskId: task._id, agentId: currentUserAgent._id })}
+                  disabled={!currentUserAgent}
+                  className={`${task.status === 'done' ? 'flex-1' : ''} py-1.5 px-3 bg-muted text-muted-foreground rounded text-xs font-medium flex items-center justify-center gap-2 transition-colors shadow-sm ${!currentUserAgent ? 'opacity-50 cursor-not-allowed' : 'hover:bg-[#e5e5e5]'}`}
+                  title={!currentUserAgent ? "User agent not found" : "Archive Task"}
+              >
+                  <IconArchive size={16} />
+                  Archive
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Status */}
