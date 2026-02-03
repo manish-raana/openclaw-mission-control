@@ -5,11 +5,13 @@ import { api } from "../../convex/_generated/api";
 type AgentsSidebarProps = {
 	isOpen?: boolean;
 	onClose?: () => void;
+	onAddTask?: (preselectedAgentId?: string) => void;
 };
 
 const AgentsSidebar: React.FC<AgentsSidebarProps> = ({
 	isOpen = false,
 	onClose,
+	onAddTask,
 }) => {
 	const agents = useQuery(api.queries.listAgents);
 
@@ -60,6 +62,18 @@ const AgentsSidebar: React.FC<AgentsSidebarProps> = ({
 				</div>
 			</div>
 
+			{onAddTask && (
+				<div className="px-6 py-3 border-b border-border">
+					<button
+						type="button"
+						onClick={onAddTask}
+						className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-semibold text-white bg-[var(--accent-blue)] rounded-lg hover:opacity-90 transition-opacity"
+					>
+						<span className="text-base leading-none">+</span> Add Task
+					</button>
+				</div>
+			)}
+
 			<div className="flex-1 overflow-y-auto py-3">
 				{agents.map((agent) => (
 					<div
@@ -88,25 +102,41 @@ const AgentsSidebar: React.FC<AgentsSidebarProps> = ({
 							</div>
 							<div className="text-xs text-muted-foreground">{agent.role}</div>
 						</div>
-						<div
-							className={`text-[9px] font-bold flex items-center gap-1 tracking-wider uppercase ${
-								agent.status === "active"
-									? "text-[var(--status-working)]"
-									: agent.status === "blocked"
-										? "text-[var(--accent-red)]"
-										: "text-muted-foreground"
-							}`}
-						>
-							<span
-								className={`w-1.5 h-1.5 rounded-full ${
+						<div className="flex items-center gap-2">
+							<div
+								className={`text-[9px] font-bold flex items-center gap-1 tracking-wider uppercase ${
 									agent.status === "active"
-										? "bg-[var(--status-working)]"
+										? "text-[var(--status-working)]"
 										: agent.status === "blocked"
-											? "bg-[var(--accent-red)]"
-											: "bg-muted-foreground"
+											? "text-[var(--accent-red)]"
+											: "text-muted-foreground"
 								}`}
-							/>
-							{agent.status}
+							>
+								<span
+									className={`w-1.5 h-1.5 rounded-full ${
+										agent.status === "active"
+											? "bg-[var(--status-working)]"
+											: agent.status === "blocked"
+												? "bg-[var(--accent-red)]"
+												: "bg-muted-foreground"
+									}`}
+								/>
+								{agent.status}
+							</div>
+							{onAddTask && (
+								<button
+									type="button"
+									onClick={(e) => {
+										e.stopPropagation();
+										onAddTask(agent._id);
+									}}
+									className="inline-flex h-[18px] w-[18px] items-center justify-center rounded bg-[var(--accent-blue)] text-white text-base font-bold leading-none hover:opacity-90 transition-opacity"
+									aria-label={`Add task for ${agent.name}`}
+									title={`Add task for ${agent.name}`}
+								>
+									+
+								</button>
+							)}
 						</div>
 					</div>
 				))}

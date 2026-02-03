@@ -2,12 +2,13 @@ import React, { useMemo, useState, useEffect } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
-import { IconX, IconCheck, IconUser, IconTag, IconMessage, IconClock, IconFileText, IconCopy, IconCalendar, IconArchive } from "@tabler/icons-react";
+import { IconX, IconCheck, IconUser, IconTag, IconMessage, IconClock, IconFileText, IconCopy, IconCalendar, IconArchive, IconPlayerPlay } from "@tabler/icons-react";
 import ReactMarkdown from "react-markdown";
 
 interface TaskDetailPanelProps {
   taskId: Id<"tasks"> | null;
   onClose: () => void;
+  onPreviewDocument?: (docId: Id<"documents">) => void;
 }
 
 const statusColors: Record<string, string> = {
@@ -28,7 +29,7 @@ const statusLabels: Record<string, string> = {
   archived: "ARCHIVED",
 };
 
-const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ taskId, onClose }) => {
+const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ taskId, onClose, onPreviewDocument }) => {
   const tasks = useQuery(api.queries.listTasks);
   const agents = useQuery(api.queries.listAgents);
   const resources = useQuery(api.documents.listByTask, taskId ? { taskId } : "skip");
@@ -41,10 +42,11 @@ const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ taskId, onClose }) =>
   const archiveTask = useMutation(api.tasks.archiveTask);
   const sendMessage = useMutation(api.messages.send);
   const createDocument = useMutation(api.documents.create);
+  const linkRun = useMutation(api.tasks.linkRun);
 
   const task = tasks?.find((t) => t._id === taskId);
   const currentUserAgent = agents?.find(a => a.name === "Manish");
-  
+
   const [description, setDescription] = useState("");
   const [isEditingDesc, setIsEditingDesc] = useState(false);
   const [commentText, setCommentText] = useState("");
@@ -74,7 +76,7 @@ const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ taskId, onClose }) =>
     if (!currentUserAgent) return;
     const currentAssignees = task.assigneeIds || [];
     const isAssigned = currentAssignees.includes(agentId);
-    
+
     let newAssignees;
     if (isAssigned) {
       newAssignees = currentAssignees.filter(id => id !== agentId);
@@ -127,6 +129,73 @@ const docsById = useMemo(() => {
     });
     setCommentText("");
     setSelectedAttachmentIds([]);
+  };
+
+  const handleResume = async () => {
+    if (!currentUserAgent || !task) return;
+
+    // Send comment first if there's text
+    const trimmed = commentText.trim();
+    if (trimmed) {
+      await sendMessage({
+        taskId: task._id,
+        agentId: currentUserAgent._id,
+        content: trimmed,
+        attachments: selectedAttachmentIds,
+      });
+      setCommentText("");
+      setSelectedAttachmentIds([]);
+    }
+
+    // Move task to in_progress
+    await updateStatus({ taskId: task._id, status: "in_progress", agentId: currentUserAgent._id });
+
+    // Build prompt with full conversation context
+    let prompt = task.description && task.description !== task.title
+      ? `${task.title}\n\n${task.description}`
+      : task.title;
+
+    // Include all comments (plus the one we just sent)
+    const allMessages = sortedMessages.slice();
+    if (trimmed) {
+      allMessages.push({
+        _id: "" as any,
+        _creationTime: Date.now(),
+        agentName: currentUserAgent.name,
+        content: trimmed,
+      } as any);
+    }
+
+    if (allMessages.length > 0) {
+      const thread = allMessages.map(m => `[${m.agentName}]: ${m.content}`).join("\n\n");
+      prompt += `\n\n---\nConversation:\n${thread}\n---\nContinue working on this task based on the conversation above.`;
+    }
+
+    // Trigger the agent
+    try {
+      const res = await fetch("/hooks/agent", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${import.meta.env.VITE_OPENCLAW_HOOK_TOKEN || ""}`,
+        },
+        body: JSON.stringify({
+          message: prompt,
+          sessionKey: `mission:${task._id}`,
+          name: "MissionControl",
+          wakeMode: "now",
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.runId) {
+          await linkRun({ taskId: task._id, openclawRunId: data.runId });
+        }
+      }
+    } catch (err) {
+      console.error("[TaskDetailPanel] Failed to trigger openclaw agent:", err);
+    }
   };
 
   const resetNewDocForm = () => {
@@ -206,7 +275,7 @@ const docsById = useMemo(() => {
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-[#f8f9fa]">
         <div className="flex items-center gap-2">
-          <span 
+          <span
             className="w-2 h-2 rounded-full"
             style={{ backgroundColor: statusColors[task.status] || "gray" }}
           />
@@ -214,7 +283,7 @@ const docsById = useMemo(() => {
             {task._id.slice(-6)}
           </span>
         </div>
-        <button 
+        <button
           onClick={onClose}
           className="p-1 hover:bg-muted rounded text-muted-foreground transition-colors"
         >
@@ -224,7 +293,7 @@ const docsById = useMemo(() => {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-5">
-        
+
         {/* Title */}
         <div>
           <h2 className="text-lg font-bold text-foreground leading-tight mb-1.5">
@@ -237,7 +306,7 @@ const docsById = useMemo(() => {
               </span>
             ))}
           </div>
-          
+
           {/* Quick Actions */}
           <div className="flex gap-2">
             {task.status !== 'done' && task.status !== 'archived' && (
@@ -285,7 +354,7 @@ const docsById = useMemo(() => {
           <div className="flex items-center justify-between">
             <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Description</label>
             {!isEditingDesc && currentUserAgent && (
-              <button 
+              <button
                 onClick={() => setIsEditingDesc(true)}
                 className="text-[10px] text-[var(--accent-blue)] opacity-0 group-hover:opacity-100 transition-opacity"
               >
@@ -293,7 +362,7 @@ const docsById = useMemo(() => {
               </button>
             )}
           </div>
-          
+
           {isEditingDesc ? (
             <div className="flex flex-col gap-2">
               <textarea
@@ -302,13 +371,13 @@ const docsById = useMemo(() => {
                 className="w-full min-h-[90px] p-2.5 text-sm border border-border rounded bg-white text-foreground focus:outline-none focus:ring-1 focus:ring-[var(--accent-blue)]"
               />
               <div className="flex justify-end gap-2">
-                <button 
+                <button
                   onClick={() => setIsEditingDesc(false)}
                   className="px-3 py-1 text-xs text-muted-foreground hover:bg-muted rounded"
                 >
                   Cancel
                 </button>
-                <button 
+                <button
                   onClick={saveDescription}
                   className="px-3 py-1 text-xs bg-foreground text-secondary rounded hover:opacity-90"
                 >
@@ -335,8 +404,8 @@ const docsById = useMemo(() => {
                      {renderAvatar(agent)}
                   </div>
                   <span className="text-xs font-medium text-foreground">{agent?.name || "Unknown"}</span>
-                  <button 
-                    onClick={() => handleAssigneeToggle(id)} 
+                  <button
+                    onClick={() => handleAssigneeToggle(id)}
                     disabled={!currentUserAgent}
                     className="hover:text-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
@@ -352,11 +421,11 @@ const docsById = useMemo(() => {
               >
                 <span>+ Add</span>
               </button>
-              
+
               {/* Dropdown for adding agents - simplified for now */}
               <div className="absolute top-full left-0 mt-1 w-48 bg-white border border-border shadow-lg rounded-lg hidden group-hover:block z-10 p-1">
                  {agents?.filter(a => !task.assigneeIds?.includes(a._id)).map(agent => (
-                   <button 
+                   <button
                     key={agent._id}
                     onClick={() => handleAssigneeToggle(agent._id)}
                     className="w-full text-left px-2 py-1.5 text-xs hover:bg-muted rounded flex items-center gap-2"
@@ -387,7 +456,7 @@ const docsById = useMemo(() => {
                   {isAddingDoc ? "Cancel" : "+ Add Resource"}
                 </button>
             </div>
-            
+
             {isAddingDoc && (
                 <div className="space-y-2 p-2.5 bg-muted/40 border border-border rounded animate-in fade-in zoom-in-95 duration-200">
                   <div className="flex flex-col gap-2">
@@ -434,7 +503,7 @@ const docsById = useMemo(() => {
             {resources && resources.length > 0 ? (
                 <div className="space-y-1">
                     {resources.map((doc) => (
-                        <div key={doc._id} className="flex items-center justify-between p-1.5 bg-white border border-border rounded text-sm hover:bg-muted transition-colors cursor-pointer group">
+                        <div key={doc._id} onClick={() => onPreviewDocument?.(doc._id)} className="flex items-center justify-between p-1.5 bg-white border border-border rounded text-sm hover:bg-muted transition-colors cursor-pointer">
                             <div className="flex items-center gap-2 overflow-hidden">
                                 <IconFileText size={14} className="text-muted-foreground shrink-0" />
                                 <div className="flex flex-col min-w-0">
@@ -562,7 +631,7 @@ const docsById = useMemo(() => {
               disabled={!currentUserAgent}
               className="w-full min-h-[80px] p-2.5 text-sm border border-border rounded bg-white text-foreground focus:outline-none focus:ring-1 focus:ring-[var(--accent-blue)] disabled:opacity-50"
             />
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-2">
               <button
                 onClick={sendComment}
                 disabled={!currentUserAgent || commentText.trim().length === 0}
@@ -570,6 +639,16 @@ const docsById = useMemo(() => {
               >
                 Send Comment
               </button>
+              {task.status === "review" && (
+                <button
+                  onClick={handleResume}
+                  disabled={!currentUserAgent}
+                  className="px-4 py-2 text-xs bg-[var(--accent-green)] text-white rounded font-semibold hover:opacity-90 disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  <IconPlayerPlay size={14} />
+                  Resume
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -599,8 +678,8 @@ const docsById = useMemo(() => {
                     <IconMessage size={12} />
                     <span>{messages?.length || 0} comments</span>
                 </div>
-                 <div 
-                    className="flex items-center gap-2 cursor-pointer hover:text-foreground transition-colors" 
+                 <div
+                    className="flex items-center gap-2 cursor-pointer hover:text-foreground transition-colors"
                     onClick={() => {
                         navigator.clipboard.writeText(task._id);
                     }}

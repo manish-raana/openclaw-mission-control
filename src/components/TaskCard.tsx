@@ -2,7 +2,7 @@ import React from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { Id } from "../../convex/_generated/dataModel";
-import { IconArchive } from "@tabler/icons-react";
+import { IconArchive, IconPlayerPlay, IconLoader2 } from "@tabler/icons-react";
 
 interface Task {
 	_id: Id<"tasks">;
@@ -24,6 +24,7 @@ interface TaskCardProps {
 	columnId: string;
 	currentUserAgentId?: Id<"agents">;
 	onArchive?: (taskId: Id<"tasks">) => void;
+	onPlay?: (taskId: Id<"tasks">) => void;
 	isOverlay?: boolean;
 }
 
@@ -36,6 +37,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
 	columnId,
 	currentUserAgentId,
 	onArchive,
+	onPlay,
 	isOverlay = false,
 }) => {
 	const {
@@ -72,8 +74,8 @@ const TaskCard: React.FC<TaskCardProps> = ({
 					? "ring-2 ring-[var(--accent-blue)] border-transparent"
 					: "border-border"
 			} ${columnId === "archived" ? "opacity-60" : ""} ${
-				isOverlay ? "drag-overlay" : ""
-			}`}
+				columnId === "in_progress" ? "card-running" : ""
+			} ${isOverlay ? "drag-overlay" : ""}`}
 			onClick={onClick}
 			{...listeners}
 			{...attributes}
@@ -81,6 +83,23 @@ const TaskCard: React.FC<TaskCardProps> = ({
 			<div className="flex justify-between text-muted-foreground text-sm">
 				<span className="text-base">↑</span>
 				<div className="flex items-center gap-2">
+					{(columnId === "inbox" || columnId === "assigned") && currentUserAgentId && onPlay && (
+						<button
+							onClick={(e) => {
+								e.stopPropagation();
+								onPlay(task._id);
+							}}
+							className="p-1 hover:bg-muted rounded transition-colors text-muted-foreground hover:text-[var(--accent-blue)]"
+							title="Start task"
+						>
+							<IconPlayerPlay size={14} />
+						</button>
+					)}
+					{columnId === "in_progress" && (
+						<span className="p-1 text-[var(--accent-blue)]" title="Running">
+							<IconLoader2 size={14} className="animate-spin" />
+						</span>
+					)}
 					{columnId === "done" && currentUserAgentId && onArchive && (
 						<button
 							onClick={(e) => {

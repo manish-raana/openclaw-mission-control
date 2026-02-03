@@ -34,6 +34,7 @@ export default defineSchema({
 		sessionKey: v.optional(v.string()),
 		openclawRunId: v.optional(v.string()),
 		startedAt: v.optional(v.number()),
+		usedCodingTools: v.optional(v.boolean()),
 	}),
 	messages: defineTable({
 		taskId: v.id("tasks"),
@@ -53,6 +54,8 @@ export default defineSchema({
 		type: v.string(),
 		path: v.optional(v.string()),
 		taskId: v.optional(v.id("tasks")),
+		createdByAgentId: v.optional(v.id("agents")),
+		messageId: v.optional(v.id("messages")),
 	}),
 	notifications: defineTable({
 		mentionedAgentId: v.id("agents"),
