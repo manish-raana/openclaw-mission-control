@@ -328,3 +328,20 @@
 ::-webkit-scrollbar-thumb:hover {
 	background: oklch(0.8 0 0);
 }
+
+/* Drag and Drop Styles */
+.dragging-card {
+	opacity: 0.5;
+	cursor: grabbing;
+}
+
+.drag-overlay {
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+	transform: rotate(2deg);
+	cursor: grabbing;
+}
+
+.drop-zone-active {
+	background-color: oklch(0.96 0.02 220);
+	box-shadow: inset 0 0 0 2px var(--accent-blue);
+}
