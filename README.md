@@ -78,7 +78,9 @@ This installs three files to `~/.openclaw/hooks/mission-control/`:
 
 Add the Mission Control URL to your OpenClaw config (`~/.openclaw/openclaw.json`):
 
-```jsonc
+For local development, use the Convex local site URL:
+
+```json
 {
   "hooks": {
     "internal": {
@@ -87,7 +89,7 @@ Add the Mission Control URL to your OpenClaw config (`~/.openclaw/openclaw.json`
         "mission-control": {
           "enabled": true,
           "env": {
-            "MISSION_CONTROL_URL": "https://your-project.convex.site/openclaw/event"
+            "MISSION_CONTROL_URL": "http://127.0.0.1:3211/openclaw/event"
           }
         }
       }
@@ -96,10 +98,18 @@ Add the Mission Control URL to your OpenClaw config (`~/.openclaw/openclaw.json`
 }
 ```
 
+For production, use your Convex deployment URL:
+
+```json
+{
+  "MISSION_CONTROL_URL": "https://your-project.convex.site/openclaw/event"
+}
+```
+
 Or set the environment variable:
 
 ```bash
-export MISSION_CONTROL_URL="https://your-project.convex.site/openclaw/event"
+export MISSION_CONTROL_URL="http://127.0.0.1:3211/openclaw/event"
 ```
 
 #### 3. Restart OpenClaw Gateway
