@@ -11,6 +11,10 @@ node_modules
 dist
 dist-ssr
 *.local
+.openclaw-sync/
+convex-jwt-private.pem
+convex-jwt-public.pem
+convex/_generated/
 
 # Editor directories and files
 .vscode/*

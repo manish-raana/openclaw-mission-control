@@ -28,6 +28,13 @@ bun install
 bun dev
 ```
 
+### OpenClaw Integration
+To sync your local OpenClaw instance into Mission Control, follow
+[docs/openclaw-setup.md](docs/openclaw-setup.md).
+
+When running `bun run dev` or `bun run dev:self-hosted`, the OpenClaw sync bridge
+starts automatically and keeps the UI populated with live data.
+
 ### 2. Seeding Data
 To populate your local dashboard with the initial roster of agents and tasks, run the seed script:
 

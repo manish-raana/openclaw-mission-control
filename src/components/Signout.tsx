@@ -11,7 +11,7 @@ function SignOutButton() {
 					className="bg-destructive text-destructive-foreground rounded-md px-2 py-1 cursor-pointer hover:bg-destructive/80"
 					onClick={() => void signOut()}
 				>
-					Sign out
+					Sign Out
 				</button>
 			)}
 		</>
