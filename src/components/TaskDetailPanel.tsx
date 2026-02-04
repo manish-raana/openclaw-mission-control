@@ -2,12 +2,13 @@ import React, { useMemo, useState, useEffect } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
-import { IconX, IconCheck, IconUser, IconTag, IconMessage, IconClock, IconFileText, IconCopy, IconCalendar, IconArchive } from "@tabler/icons-react";
+import { IconX, IconCheck, IconUser, IconTag, IconMessage, IconClock, IconFileText, IconCopy, IconCalendar, IconArchive, IconPlayerPlay } from "@tabler/icons-react";
 import ReactMarkdown from "react-markdown";
 
 interface TaskDetailPanelProps {
   taskId: Id<"tasks"> | null;
   onClose: () => void;
+  onPreviewDocument?: (docId: Id<"documents">) => void;
 }
 
 const statusColors: Record<string, string> = {
@@ -28,7 +29,7 @@ const statusLabels: Record<string, string> = {
   archived: "ARCHIVED",
 };
 
-const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ taskId, onClose }) => {
+const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ taskId, onClose, onPreviewDocument }) => {
   const tasks = useQuery(api.queries.listTasks);
   const agents = useQuery(api.queries.listAgents);
   const resources = useQuery(api.documents.listByTask, taskId ? { taskId } : "skip");
@@ -41,6 +42,7 @@ const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ taskId, onClose }) =>
   const archiveTask = useMutation(api.tasks.archiveTask);
   const sendMessage = useMutation(api.messages.send);
   const createDocument = useMutation(api.documents.create);
+  const linkRun = useMutation(api.tasks.linkRun);
 
   const task = tasks?.find((t) => t._id === taskId);
   const currentUserAgent = agents?.find(a => a.name === "Manish");
@@ -91,15 +93,15 @@ const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ taskId, onClose }) =>
     }
   };
 
-type Resource = NonNullable<typeof resources>[number];
-
-const docsById = useMemo(() => {
-  const map = new Map<string, Resource>();
-  (resources ?? []).forEach((doc) => {
-    map.set(doc._id, doc);
-  });
-  return map;
-}, [resources]);
+  const docsById = useMemo(() => {
+    const map = new Map<string, (typeof resources)[number]>();
+    if (resources) {
+      resources.forEach((doc) => {
+        map.set(doc._id, doc);
+      });
+    }
+    return map;
+  }, [resources]);
 
   const sortedMessages = useMemo(() => {
     if (!messages) return [];
@@ -129,6 +131,90 @@ const docsById = useMemo(() => {
     setSelectedAttachmentIds([]);
   };
 
+  const buildAgentPreamble = () => {
+    if (!task || !agents) return "";
+    const assignee = task.assigneeIds.length > 0
+      ? agents.find(a => a._id === task.assigneeIds[0])
+      : null;
+    if (!assignee) return "";
+
+    const parts: string[] = [];
+    if (assignee.systemPrompt) parts.push(`System Prompt:\n${assignee.systemPrompt}`);
+    if (assignee.character) parts.push(`Character:\n${assignee.character}`);
+    if (assignee.lore) parts.push(`Lore:\n${assignee.lore}`);
+
+    return parts.length > 0 ? parts.join("\n\n") + "\n\n---\n\n" : "";
+  };
+
+  const handleResume = async () => {
+    if (!currentUserAgent || !task) return;
+
+    // Send comment first if there's text
+    const trimmed = commentText.trim();
+    if (trimmed) {
+      await sendMessage({
+        taskId: task._id,
+        agentId: currentUserAgent._id,
+        content: trimmed,
+        attachments: selectedAttachmentIds,
+      });
+      setCommentText("");
+      setSelectedAttachmentIds([]);
+    }
+
+    // Move task to in_progress
+    await updateStatus({ taskId: task._id, status: "in_progress", agentId: currentUserAgent._id });
+
+    // Build prompt with agent context at the top
+    let prompt = buildAgentPreamble();
+
+    prompt += task.description && task.description !== task.title
+      ? `${task.title}\n\n${task.description}`
+      : task.title;
+
+    // Include all comments (plus the one we just sent)
+    const allMessages = sortedMessages.slice();
+    if (trimmed) {
+      allMessages.push({
+        _id: "" as any,
+        _creationTime: Date.now(),
+        agentName: currentUserAgent.name,
+        content: trimmed,
+      } as any);
+    }
+
+    if (allMessages.length > 0) {
+      const thread = allMessages.map(m => `[${m.agentName}]: ${m.content}`).join("\n\n");
+      prompt += `\n\n---\nConversation:\n${thread}\n---\nContinue working on this task based on the conversation above.`;
+    }
+
+    // Trigger the agent
+    try {
+      const res = await fetch("/hooks/agent", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${import.meta.env.VITE_OPENCLAW_HOOK_TOKEN || ""}`,
+        },
+        body: JSON.stringify({
+          message: prompt,
+          sessionKey: `mission:${task._id}`,
+          name: "MissionControl",
+          wakeMode: "now",
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.runId) {
+          await linkRun({ taskId: task._id, openclawRunId: data.runId });
+        }
+      }
+    } catch (err) {
+      console.error("[TaskDetailPanel] Failed to trigger openclaw agent:", err);
+    }
+  };
+
   const resetNewDocForm = () => {
     setNewDocTitle("");
     setNewDocType("note");
@@ -153,40 +239,13 @@ const docsById = useMemo(() => {
     setIsAddingDoc(false);
   };
 
-  const renderAvatar = (
-    agent?: { name: string; avatar?: string } | string
-  ) => {
-    if (!agent) return <IconUser size={10} />;
-
-    if (typeof agent === "string") {
-      const avatarUrl = agent;
-      if (avatarUrl && (avatarUrl.startsWith("http") || avatarUrl.startsWith("data:"))) {
-        return <img src={avatarUrl} className="w-full h-full object-cover" alt="avatar" />;
-      }
-      return (
-        <span className="text-[9px] font-bold flex items-center justify-center h-full w-full leading-none text-muted-foreground bg-muted">
-          {avatarUrl.slice(0, 2).toUpperCase()}
-        </span>
-      );
+  const renderAvatar = (avatar?: string) => {
+    if (!avatar) return <IconUser size={10} />;
+    const isUrl = avatar.startsWith("http") || avatar.startsWith("data:");
+    if (isUrl) {
+      return <img src={avatar} className="w-full h-full object-cover" alt="avatar" />;
     }
-
-    const avatarUrl = agent.avatar;
-    if (avatarUrl && (avatarUrl.startsWith("http") || avatarUrl.startsWith("data:"))) {
-      return <img src={avatarUrl} className="w-full h-full object-cover" alt={agent.name} />;
-    }
-
-    const initials = agent.name
-      .split(" ")
-      .map((n) => n[0])
-      .slice(0, 2)
-      .join("")
-      .toUpperCase();
-
-    return (
-      <span className="text-[9px] font-bold flex items-center justify-center h-full w-full leading-none text-muted-foreground bg-muted">
-        {initials}
-      </span>
-    );
+    return <span className="text-[10px] flex items-center justify-center h-full w-full leading-none">{avatar}</span>;
   };
 
   const formatCreationDate = (ms: number) => {
@@ -332,7 +391,7 @@ const docsById = useMemo(() => {
               return (
                 <div key={id} className="flex items-center gap-1.5 px-2 py-1 bg-white border border-border rounded-full shadow-sm">
                   <div className="w-4 h-4 rounded-full bg-muted flex items-center justify-center overflow-hidden">
-                     {renderAvatar(agent)}
+                     {renderAvatar(agent?.avatar)}
                   </div>
                   <span className="text-xs font-medium text-foreground">{agent?.name || "Unknown"}</span>
                   <button 
@@ -362,7 +421,7 @@ const docsById = useMemo(() => {
                     className="w-full text-left px-2 py-1.5 text-xs hover:bg-muted rounded flex items-center gap-2"
                    >
                      <div className="w-4 h-4 rounded-full bg-muted flex items-center justify-center overflow-hidden">
-                        {renderAvatar(agent)}
+                        {renderAvatar(agent.avatar)}
                      </div>
                      {agent.name}
                    </button>
@@ -376,65 +435,12 @@ const docsById = useMemo(() => {
         </div>
 
         {/* Resources / Deliverables */}
-        <div className="space-y-2">
-            <div className="flex items-center justify-between">
+        {resources && resources.length > 0 && (
+            <div className="space-y-2">
                 <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Resources / Deliverables</label>
-                <button
-                  onClick={() => setIsAddingDoc((prev) => !prev)}
-                  disabled={!currentUserAgent}
-                  className="text-[10px] text-[var(--accent-blue)] disabled:opacity-50 hover:underline"
-                >
-                  {isAddingDoc ? "Cancel" : "+ Add Resource"}
-                </button>
-            </div>
-            
-            {isAddingDoc && (
-                <div className="space-y-2 p-2.5 bg-muted/40 border border-border rounded animate-in fade-in zoom-in-95 duration-200">
-                  <div className="flex flex-col gap-2">
-                    <input
-                      value={newDocTitle}
-                      onChange={(e) => setNewDocTitle(e.target.value)}
-                      placeholder="Document title"
-                      className="w-full p-2 text-xs border border-border rounded bg-white text-foreground focus:outline-none focus:ring-1 focus:ring-[var(--accent-blue)]"
-                      autoFocus
-                    />
-                    <div className="flex gap-2">
-                      <input
-                        value={newDocType}
-                        onChange={(e) => setNewDocType(e.target.value)}
-                        placeholder="Type (note, spec, link)"
-                        className="flex-1 p-2 text-xs border border-border rounded bg-white text-foreground focus:outline-none focus:ring-1 focus:ring-[var(--accent-blue)]"
-                      />
-                      <input
-                        value={newDocPath}
-                        onChange={(e) => setNewDocPath(e.target.value)}
-                        placeholder="Path (optional)"
-                        className="flex-1 p-2 text-xs border border-border rounded bg-white text-foreground focus:outline-none focus:ring-1 focus:ring-[var(--accent-blue)]"
-                      />
-                    </div>
-                    <textarea
-                      value={newDocContent}
-                      onChange={(e) => setNewDocContent(e.target.value)}
-                      placeholder="Content (optional)"
-                      className="w-full min-h-[70px] p-2 text-xs border border-border rounded bg-white text-foreground focus:outline-none focus:ring-1 focus:ring-[var(--accent-blue)]"
-                    />
-                    <div className="flex justify-end gap-2">
-                      <button
-                        onClick={submitNewDoc}
-                        disabled={!currentUserAgent || !newDocTitle.trim()}
-                        className="px-3 py-1 text-[10px] bg-foreground text-secondary rounded hover:opacity-90 disabled:opacity-50"
-                      >
-                        Save Resource
-                      </button>
-                    </div>
-                  </div>
-                </div>
-            )}
-
-            {resources && resources.length > 0 ? (
                 <div className="space-y-1">
                     {resources.map((doc) => (
-                        <div key={doc._id} className="flex items-center justify-between p-1.5 bg-white border border-border rounded text-sm hover:bg-muted transition-colors cursor-pointer group">
+                        <div key={doc._id} onClick={() => onPreviewDocument?.(doc._id)} className="flex items-center justify-between p-1.5 bg-white border border-border rounded text-sm hover:bg-muted transition-colors cursor-pointer">
                             <div className="flex items-center gap-2 overflow-hidden">
                                 <IconFileText size={14} className="text-muted-foreground shrink-0" />
                                 <div className="flex flex-col min-w-0">
@@ -446,15 +452,20 @@ const docsById = useMemo(() => {
                         </div>
                     ))}
                 </div>
-            ) : (
-                !isAddingDoc && <div className="text-xs text-muted-foreground italic pl-1">No resources linked.</div>
-            )}
-        </div>
+            </div>
+        )}
 
         {/* Comments */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Comments</label>
+            <button
+              onClick={() => setIsAddingDoc((prev) => !prev)}
+              disabled={!currentUserAgent}
+              className="text-[10px] text-[var(--accent-blue)] disabled:opacity-50"
+            >
+              {isAddingDoc ? "Close Resource" : "Add Resource"}
+            </button>
           </div>
 
           {sortedMessages.length === 0 && (
@@ -468,7 +479,7 @@ const docsById = useMemo(() => {
               {sortedMessages.map((msg) => (
                 <div key={msg._id} className="flex gap-2 p-2.5 bg-white border border-border rounded">
                   <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center overflow-hidden shrink-0">
-                    {renderAvatar({ name: msg.agentName, avatar: msg.agentAvatar })}
+                    {renderAvatar(msg.agentAvatar)}
                   </div>
                   <div className="flex-1 space-y-1">
                     <div className="flex items-center justify-between text-[11px] text-muted-foreground">
@@ -552,7 +563,56 @@ const docsById = useMemo(() => {
             </div>
           )}
 
-          {/* Form moved to Resources section */}
+          {isAddingDoc && (
+            <div className="space-y-2 p-2.5 bg-muted/40 border border-border rounded">
+              <div className="flex flex-col gap-2">
+                <input
+                  value={newDocTitle}
+                  onChange={(e) => setNewDocTitle(e.target.value)}
+                  placeholder="Document title"
+                  className="w-full p-2 text-xs border border-border rounded bg-white text-foreground focus:outline-none focus:ring-1 focus:ring-[var(--accent-blue)]"
+                />
+                <div className="flex gap-2">
+                  <input
+                    value={newDocType}
+                    onChange={(e) => setNewDocType(e.target.value)}
+                    placeholder="Type (note, spec, link)"
+                    className="flex-1 p-2 text-xs border border-border rounded bg-white text-foreground focus:outline-none focus:ring-1 focus:ring-[var(--accent-blue)]"
+                  />
+                  <input
+                    value={newDocPath}
+                    onChange={(e) => setNewDocPath(e.target.value)}
+                    placeholder="Path (optional)"
+                    className="flex-1 p-2 text-xs border border-border rounded bg-white text-foreground focus:outline-none focus:ring-1 focus:ring-[var(--accent-blue)]"
+                  />
+                </div>
+                <textarea
+                  value={newDocContent}
+                  onChange={(e) => setNewDocContent(e.target.value)}
+                  placeholder="Content (optional)"
+                  className="w-full min-h-[70px] p-2 text-xs border border-border rounded bg-white text-foreground focus:outline-none focus:ring-1 focus:ring-[var(--accent-blue)]"
+                />
+                <div className="flex justify-end gap-2">
+                  <button
+                    onClick={() => {
+                      resetNewDocForm();
+                      setIsAddingDoc(false);
+                    }}
+                    className="px-3 py-1 text-[10px] text-muted-foreground hover:bg-muted rounded"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={submitNewDoc}
+                    disabled={!currentUserAgent || !newDocTitle.trim()}
+                    className="px-3 py-1 text-[10px] bg-foreground text-secondary rounded hover:opacity-90 disabled:opacity-50"
+                  >
+                    Add Resource
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="space-y-2">
             <textarea
@@ -562,7 +622,7 @@ const docsById = useMemo(() => {
               disabled={!currentUserAgent}
               className="w-full min-h-[80px] p-2.5 text-sm border border-border rounded bg-white text-foreground focus:outline-none focus:ring-1 focus:ring-[var(--accent-blue)] disabled:opacity-50"
             />
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-2">
               <button
                 onClick={sendComment}
                 disabled={!currentUserAgent || commentText.trim().length === 0}
@@ -570,6 +630,16 @@ const docsById = useMemo(() => {
               >
                 Send Comment
               </button>
+              {task.status === "review" && (
+                <button
+                  onClick={handleResume}
+                  disabled={!currentUserAgent}
+                  className="px-4 py-2 text-xs bg-[var(--accent-green)] text-white rounded font-semibold hover:opacity-90 disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  <IconPlayerPlay size={14} />
+                  Resume
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -588,12 +658,6 @@ const docsById = useMemo(() => {
                     </div>
                 )}
             </div>
-            {task.startedAt && (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                     <IconClock size={12} className="text-[var(--accent-green)]" />
-                     <span>Started {formatCreationDate(task.startedAt)}</span>
-                </div>
-            )}
              <div className="flex items-center justify-between text-xs text-muted-foreground">
                 <div className="flex items-center gap-2">
                     <IconMessage size={12} />

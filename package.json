@@ -13,11 +13,7 @@
 		"preview": "vite preview",
 		"seed": "convex run seed:run",
 		"format": "biome format --write",
-		"check": "biome check .",
-		"prepare": "husky"
-	},
-	"lint-staged": {
-		"*.{ts,tsx,js,jsx}": "npm run lint"
+		"check": "biome check ."
 	},
 	"dependencies": {
 		"@convex-dev/auth": "^0.0.90",
@@ -44,7 +40,6 @@
 		"eslint-plugin-react-hooks": "^7.0.1",
 		"eslint-plugin-react-refresh": "^0.4.26",
 		"globals": "^17.2.0",
-		"husky": "^9.1.7",
 		"npm-run-all2": "^8.0.4",
 		"prettier": "^3.8.1",
 		"tailwindcss": "^4.1.18",

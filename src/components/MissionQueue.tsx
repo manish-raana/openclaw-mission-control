@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, useConvex } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
 import { IconArchive } from "@tabler/icons-react";
@@ -47,13 +47,15 @@ function formatRelativeTime(timestamp: number | null): string {
 	return new Date(timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-const baseColumns = [
+const columns = [
 	{ id: "inbox", label: "INBOX", color: "var(--text-subtle)" },
 	{ id: "assigned", label: "ASSIGNED", color: "var(--accent-orange)" },
 	{ id: "in_progress", label: "IN PROGRESS", color: "var(--accent-blue)" },
 	{ id: "review", label: "REVIEW", color: "var(--text-main)" },
 	{ id: "done", label: "DONE", color: "var(--accent-green)" },
 ];
+
+const archivedColumn = { id: "archived", label: "ARCHIVED", color: "var(--text-subtle)" };
 
 interface MissionQueueProps {
 	selectedTaskId: Id<"tasks"> | null;
@@ -63,11 +65,14 @@ interface MissionQueueProps {
 const MissionQueue: React.FC<MissionQueueProps> = ({ selectedTaskId, onSelectTask }) => {
 	const tasks = useQuery(api.queries.listTasks);
 	const agents = useQuery(api.queries.listAgents);
+	const archiveTask = useMutation(api.tasks.archiveTask);
+	const updateStatus = useMutation(api.tasks.updateStatus);
+	const linkRun = useMutation(api.tasks.linkRun);
 	const [showArchived, setShowArchived] = useState(false);
+	const convex = useConvex();
+	const [activeTask, setActiveTask] = useState<Task | null>(null);
 
 	const currentUserAgent = agents?.find(a => a.name === "Manish");
-	const updateStatus = useMutation(api.tasks.updateStatus);
-	const [activeTask, setActiveTask] = useState<Task | null>(null);
 
 	const sensors = useSensors(
 		useSensor(PointerSensor, {
@@ -94,10 +99,6 @@ const MissionQueue: React.FC<MissionQueueProps> = ({ selectedTaskId, onSelectTas
 		return agents.find((a) => a._id === id)?.name || "Unknown";
 	};
 
-	const archivedCount = tasks.filter((t) => t.status === "archived").length;
-	const columns = showArchived
-		? [...baseColumns, { id: "archived", label: "ARCHIVED", color: "var(--text-subtle)" }]
-		: baseColumns;
 	const handleDragStart = (event: DragStartEvent) => {
 		const task = tasks.find((t) => t._id === event.active.id);
 		if (task) {
@@ -123,6 +124,85 @@ const MissionQueue: React.FC<MissionQueueProps> = ({ selectedTaskId, onSelectTas
 			});
 		}
 	};
+
+	const handleArchive = (taskId: Id<"tasks">) => {
+		if (currentUserAgent) {
+			archiveTask({ taskId, agentId: currentUserAgent._id });
+		}
+	};
+
+	const buildAgentPreamble = (task: Task) => {
+		const assignee = task.assigneeIds.length > 0
+			? agents.find(a => a._id === task.assigneeIds[0])
+			: null;
+		if (!assignee) return "";
+
+		const parts: string[] = [];
+		if (assignee.systemPrompt) parts.push(`System Prompt:\n${assignee.systemPrompt}`);
+		if (assignee.character) parts.push(`Character:\n${assignee.character}`);
+		if (assignee.lore) parts.push(`Lore:\n${assignee.lore}`);
+
+		return parts.length > 0 ? parts.join("\n\n") + "\n\n---\n\n" : "";
+	};
+
+	const buildPrompt = async (task: Task) => {
+		let prompt = buildAgentPreamble(task);
+
+		prompt += task.description && task.description !== task.title
+			? `${task.title}\n\n${task.description}`
+			: task.title;
+
+		const messages = await convex.query(api.queries.listMessages, { taskId: task._id });
+		if (messages && messages.length > 0) {
+			const sorted = [...messages].sort((a, b) => a._creationTime - b._creationTime);
+			const thread = sorted.map(m => `[${m.agentName}]: ${m.content}`).join("\n\n");
+			prompt += `\n\n---\nConversation:\n${thread}\n---\nContinue working on this task based on the conversation above.`;
+		}
+
+		return prompt;
+	};
+
+	const triggerAgent = async (taskId: Id<"tasks">, message: string) => {
+		try {
+			const res = await fetch("/hooks/agent", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					"Authorization": `Bearer ${import.meta.env.VITE_OPENCLAW_HOOK_TOKEN || ""}`,
+				},
+				body: JSON.stringify({
+					message,
+					sessionKey: `mission:${taskId}`,
+					name: "MissionControl",
+					wakeMode: "now",
+				}),
+			});
+
+			if (res.ok) {
+				const data = await res.json();
+				if (data.runId) {
+					await linkRun({ taskId, openclawRunId: data.runId });
+				}
+			}
+		} catch (err) {
+			console.error("[MissionQueue] Failed to trigger openclaw agent:", err);
+		}
+	};
+
+	const handlePlay = async (taskId: Id<"tasks">) => {
+		if (!currentUserAgent) return;
+
+		await updateStatus({ taskId, status: "in_progress", agentId: currentUserAgent._id });
+
+		const task = tasks.find((t) => t._id === taskId);
+		if (!task) return;
+
+		const message = await buildPrompt(task as Task);
+		await triggerAgent(taskId, message);
+	};
+
+	const displayColumns = showArchived ? [...columns, archivedColumn] : columns;
+	const archivedCount = tasks.filter((t) => t.status === "archived").length;
 
 	return (
 		<main className="[grid-area:main] bg-secondary flex flex-col overflow-hidden">
@@ -163,12 +243,8 @@ const MissionQueue: React.FC<MissionQueueProps> = ({ selectedTaskId, onSelectTas
 				onDragStart={handleDragStart}
 				onDragEnd={handleDragEnd}
 			>
-				<div
-					className={`flex-1 grid gap-px bg-border overflow-x-auto ${
-						showArchived ? "grid-cols-6" : "grid-cols-5"
-					}`}
-				>
-					{columns.map((col) => (
+				<div className={`flex-1 grid gap-px bg-border overflow-x-auto ${showArchived ? "grid-cols-6" : "grid-cols-5"}`}>
+					{displayColumns.map((col) => (
 						<KanbanColumn
 							key={col.id}
 							column={col}
@@ -186,6 +262,8 @@ const MissionQueue: React.FC<MissionQueueProps> = ({ selectedTaskId, onSelectTas
 										formatRelativeTime={formatRelativeTime}
 										columnId={col.id}
 										currentUserAgentId={currentUserAgent?._id}
+										onArchive={handleArchive}
+										onPlay={handlePlay}
 									/>
 								))}
 						</KanbanColumn>

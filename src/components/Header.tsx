@@ -17,9 +17,7 @@ const Header: React.FC<HeaderProps> = ({ onOpenAgents, onOpenLiveFeed }) => {
 
 	// Calculate counts
 	const activeAgentsCount = agents ? agents.filter(a => a.status === "active").length : 0;
-	const tasksInQueueCount = tasks
-		? tasks.filter((t) => t.status !== "done" && t.status !== "archived").length
-		: 0;
+	const tasksInQueueCount = tasks ? tasks.filter(t => t.status !== "done").length : 0;
 
 	useEffect(() => {
 		const timer = setInterval(() => setTime(new Date()), 1000);
@@ -90,9 +88,6 @@ const Header: React.FC<HeaderProps> = ({ onOpenAgents, onOpenLiveFeed }) => {
 			</div>
 
 			<div className="flex items-center gap-2 md:gap-6">
-				<button className="hidden md:flex items-center gap-1.5 bg-muted hover:bg-accent border-none px-4 py-2 rounded-lg text-sm font-medium cursor-pointer text-foreground transition-colors">
-					<span className="text-base">📚</span> Docs
-				</button>
 				<button
 					type="button"
 					className="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-lg bg-muted hover:bg-accent transition-colors"

@@ -63,24 +63,19 @@ When an OpenClaw agent runs:
 
 #### 1. Install the Mission Control Hook
 
-Copy the hook files from this repo to your OpenClaw hooks directory:
+Copy the hook to your OpenClaw hooks directory:
 
 ```bash
-cp -r hooks/mission-control ~/.openclaw/hooks/mission-control
+cp -r ~/.openclaw/hooks/mission-control ~/.openclaw/hooks/
 ```
 
-This installs three files to `~/.openclaw/hooks/mission-control/`:
-- `handler.ts` — Event handler that captures lifecycle, tool, and document events
-- `HOOK.md` — Hook metadata (name, events, description)
-- `README.md` — Detailed setup and troubleshooting guide
+Or create it manually at `~/.openclaw/hooks/mission-control/handler.ts`.
 
 #### 2. Configure the Webhook URL
 
-Add the Mission Control URL to your OpenClaw config (`~/.openclaw/openclaw.json`):
+Add the Mission Control URL to your OpenClaw config (`~/.openclaw/config.jsonc`):
 
-For local development, use the Convex local site URL:
-
-```json
+```jsonc
 {
   "hooks": {
     "internal": {
@@ -89,7 +84,7 @@ For local development, use the Convex local site URL:
         "mission-control": {
           "enabled": true,
           "env": {
-            "MISSION_CONTROL_URL": "http://127.0.0.1:3211/openclaw/event"
+            "MISSION_CONTROL_URL": "https://your-project.convex.site/openclaw/event"
           }
         }
       }
@@ -98,18 +93,10 @@ For local development, use the Convex local site URL:
 }
 ```
 
-For production, use your Convex deployment URL:
-
-```json
-{
-  "MISSION_CONTROL_URL": "https://your-project.convex.site/openclaw/event"
-}
-```
-
 Or set the environment variable:
 
 ```bash
-export MISSION_CONTROL_URL="http://127.0.0.1:3211/openclaw/event"
+export MISSION_CONTROL_URL="https://your-project.convex.site/openclaw/event"
 ```
 
 #### 3. Restart OpenClaw Gateway
@@ -124,8 +111,7 @@ openclaw gateway restart
 |---------|-------------|
 | **Prompt Capture** | User prompts become task titles and descriptions |
 | **Duration Tracking** | Shows how long each agent run took |
-| **Source Detection** | Messages from Telegram, webchat (Mac UI), Discord, etc. show source prefix |
-| **Document Capture** | Files created by agents (markdown, code, images) are tracked |
+| **Source Detection** | Messages from Telegram, Discord, etc. show source prefix |
 | **Markdown Comments** | Progress updates render with full markdown support |
 | **Agent Matching** | OpenClaw agents map to Mission Control agents by name |
 
