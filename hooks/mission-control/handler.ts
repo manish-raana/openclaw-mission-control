@@ -38,6 +38,7 @@ type OpenClawConfig = {
 
 let listenerRegistered = false;
 let missionControlUrl: string | undefined;
+let missionControlToken: string | undefined;
 
 // Track session info by sessionKey
 const sessionInfo = new Map<string, { agentId: string; sessionId: string }>();
@@ -52,9 +53,13 @@ async function postToMissionControl(payload: Record<string, unknown>) {
   if (!missionControlUrl) return;
 
   try {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (missionControlToken) {
+      headers.Authorization = `Bearer ${missionControlToken}`;
+    }
     const response = await fetch(missionControlUrl, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify(payload),
     });
     if (!response.ok) {
@@ -68,6 +73,11 @@ async function postToMissionControl(payload: Record<string, unknown>) {
 function resolveUrl(cfg?: OpenClawConfig): string | undefined {
   const hookConfig = cfg?.hooks?.internal?.entries?.["mission-control"];
   return hookConfig?.env?.MISSION_CONTROL_URL || process.env.MISSION_CONTROL_URL;
+}
+
+function resolveToken(cfg?: OpenClawConfig): string | undefined {
+  const hookConfig = cfg?.hooks?.internal?.entries?.["mission-control"];
+  return hookConfig?.env?.MISSION_CONTROL_TOKEN || process.env.MISSION_CONTROL_TOKEN;
 }
 
 /**
@@ -245,6 +255,7 @@ const handler = async (event: HookEvent) => {
   if (!missionControlUrl) {
     const cfg = event.context.cfg as OpenClawConfig | undefined;
     missionControlUrl = resolveUrl(cfg);
+    missionControlToken = resolveToken(cfg);
   }
 
   console.log(`[mission-control] Event: ${event.type}:${event.action} session=${event.sessionKey}`);

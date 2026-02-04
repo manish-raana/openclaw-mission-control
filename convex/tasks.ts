@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation } from "./_generated/server";
+import { canAccessTenantRecord, getTenantFilter, requireTenantId } from "./tenant";
 
 export const updateStatus = mutation({
   args: {
@@ -15,8 +16,12 @@ export const updateStatus = mutation({
     agentId: v.id("agents"),
   },
   handler: async (ctx, args) => {
+    const { tenantId, allowUnscoped } = await getTenantFilter(ctx);
     const task = await ctx.db.get(args.taskId);
     if (!task) throw new Error("Task not found");
+    if (!canAccessTenantRecord(task.tenantId, tenantId, allowUnscoped)) {
+      throw new Error("Unauthorized");
+    }
 
     await ctx.db.patch(args.taskId, { status: args.status });
 
@@ -25,6 +30,7 @@ export const updateStatus = mutation({
       agentId: args.agentId,
       message: `changed status of "${task.title}" to ${args.status}`,
       targetId: args.taskId,
+      tenantId: task.tenantId,
     });
   },
 });
@@ -36,8 +42,12 @@ export const updateAssignees = mutation({
     agentId: v.id("agents"),
   },
   handler: async (ctx, args) => {
+    const { tenantId, allowUnscoped } = await getTenantFilter(ctx);
     const task = await ctx.db.get(args.taskId);
     if (!task) throw new Error("Task not found");
+    if (!canAccessTenantRecord(task.tenantId, tenantId, allowUnscoped)) {
+      throw new Error("Unauthorized");
+    }
 
     await ctx.db.patch(args.taskId, { assigneeIds: args.assigneeIds });
 
@@ -46,6 +56,7 @@ export const updateAssignees = mutation({
       agentId: args.agentId,
       message: `updated assignees for "${task.title}"`,
       targetId: args.taskId,
+      tenantId: task.tenantId,
     });
   },
 });
@@ -59,6 +70,7 @@ export const createTask = mutation({
     borderColor: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const tenantId = await requireTenantId(ctx);
     const taskId = await ctx.db.insert("tasks", {
       title: args.title,
       description: args.description,
@@ -66,6 +78,7 @@ export const createTask = mutation({
       assigneeIds: [],
       tags: args.tags,
       borderColor: args.borderColor,
+      tenantId,
     });
     return taskId;
   },
@@ -77,8 +90,12 @@ export const archiveTask = mutation({
     agentId: v.id("agents"),
   },
   handler: async (ctx, args) => {
+    const { tenantId, allowUnscoped } = await getTenantFilter(ctx);
     const task = await ctx.db.get(args.taskId);
     if (!task) throw new Error("Task not found");
+    if (!canAccessTenantRecord(task.tenantId, tenantId, allowUnscoped)) {
+      throw new Error("Unauthorized");
+    }
 
     await ctx.db.patch(args.taskId, { status: "archived" });
 
@@ -87,6 +104,7 @@ export const archiveTask = mutation({
       agentId: args.agentId,
       message: `archived "${task.title}"`,
       targetId: args.taskId,
+      tenantId: task.tenantId,
     });
   },
 });
@@ -113,8 +131,12 @@ export const updateTask = mutation({
     agentId: v.id("agents"),
   },
   handler: async (ctx, args) => {
+    const { tenantId, allowUnscoped } = await getTenantFilter(ctx);
     const task = await ctx.db.get(args.taskId);
     if (!task) throw new Error("Task not found");
+    if (!canAccessTenantRecord(task.tenantId, tenantId, allowUnscoped)) {
+      throw new Error("Unauthorized");
+    }
 
     const fields: any = {};
     const updates: string[] = [];
@@ -140,6 +162,7 @@ export const updateTask = mutation({
         agentId: args.agentId,
         message: `updated ${updates.join(", ")} of "${task.title}"`,
         targetId: args.taskId,
+        tenantId: task.tenantId,
       });
     }
   },

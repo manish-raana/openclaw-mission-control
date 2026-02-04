@@ -13,6 +13,7 @@ A real-time, high-performance dashboard for managing autonomous agents and compl
 - 🔐 **Secure Access**: Integrated Convex Auth for secure terminal login and management.
 - 📱 **Responsive Design**: Premium, centered layout that works seamlessly across all devices.
 - 🔗 **OpenClaw Integration**: Automatic task tracking for OpenClaw agent runs with real-time progress updates.
+- 🔐 **Hosted Tokens**: Generate and rotate API tokens in the Settings sidebar for multi-user hosted deployments.
 
 ## 🛠 Tech Stack
 
@@ -84,7 +85,8 @@ Add the Mission Control URL to your OpenClaw config (`~/.openclaw/config.jsonc`)
         "mission-control": {
           "enabled": true,
           "env": {
-            "MISSION_CONTROL_URL": "https://your-project.convex.site/openclaw/event"
+            "MISSION_CONTROL_URL": "http://127.0.0.1:3211/openclaw/event",
+            "MISSION_CONTROL_TOKEN": "mc_live_..."
           }
         }
       }
@@ -93,16 +95,54 @@ Add the Mission Control URL to your OpenClaw config (`~/.openclaw/config.jsonc`)
 }
 ```
 
-Or set the environment variable:
+For production, use your Convex deployment URL:
+
+```json
+{
+  "hooks": {
+    "internal": {
+      "enabled": true,
+      "entries": {
+        "mission-control": {
+          "enabled": true,
+          "env": {
+            "MISSION_CONTROL_URL": "https://your-project.convex.site/openclaw/event",
+            "MISSION_CONTROL_TOKEN": "mc_live_..."
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+Or set the environment variables:
 
 ```bash
 export MISSION_CONTROL_URL="https://your-project.convex.site/openclaw/event"
+export MISSION_CONTROL_TOKEN="mc_live_..."
 ```
+
+If you host Mission Control and want to require tokens, set:
+
+```bash
+export MISSION_CONTROL_AUTH_REQUIRED=true
+```
+
+Local/self-host remains compatible when this flag is not set.
 
 #### 3. Restart OpenClaw Gateway
 
 ```bash
 openclaw gateway restart
+```
+
+### Optional: Configure Hook URL for Settings UI
+
+To show the correct webhook URL in the Settings sidebar, set:
+
+```bash
+export VITE_MISSION_CONTROL_WEBHOOK_URL="https://your-project.convex.site/openclaw/event"
 ```
 
 ### Features
@@ -134,6 +174,12 @@ Payload format:
   "response": "agent response",
   "error": "error message"
 }
+```
+
+When auth is enabled, include:
+
+```
+Authorization: Bearer <MISSION_CONTROL_TOKEN>
 ```
 
 ## 📖 Learn More

@@ -48,7 +48,8 @@ Add to `~/.openclaw/openclaw.json` under `hooks.internal.entries`:
         "mission-control": {
           "enabled": true,
           "env": {
-            "MISSION_CONTROL_URL": "http://127.0.0.1:3211/openclaw/event"
+            "MISSION_CONTROL_URL": "http://127.0.0.1:3211/openclaw/event",
+            "MISSION_CONTROL_TOKEN": "mc_live_..."
           }
         }
       }
@@ -59,10 +60,14 @@ Add to `~/.openclaw/openclaw.json` under `hooks.internal.entries`:
 
 For production, use your Convex deployment URL:
 ```json
-"MISSION_CONTROL_URL": "https://your-project.convex.site/openclaw/event"
+{
+  "MISSION_CONTROL_URL": "https://your-project.convex.site/openclaw/event",
+  "MISSION_CONTROL_TOKEN": "mc_live_..."
+}
 ```
 
 **Note:** Port 3211 is the Convex site URL port for HTTP endpoints in local development. For production, use your Convex deployment site URL.
+**Auth Note:** If your hosted deployment requires auth, you must set `MISSION_CONTROL_TOKEN`. For local/self-host, auth can be optional.
 
 ### 4. Verify Hook Registration
 
@@ -120,6 +125,10 @@ openclaw logs --filter mission-control --tail 20
 ### Check Mission Control UI
 
 Open the Mission Control dashboard to see if tasks appear in the "In Progress" column when an agent starts, and move to "Done" when complete.
+
+## Token Rotation
+
+You can create multiple active tokens in the Mission Control Settings sidebar. When rotating, create a new token, update your hook config, then revoke the old token once confirmed.
 
 ## Mission Control Backend Setup
 

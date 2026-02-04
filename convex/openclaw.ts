@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation } from "./_generated/server";
+import { requireTenantId } from "./tenant";
 
 const SYSTEM_AGENT_NAME = "OpenClaw";
 // Tools that reliably indicate coding work (write excluded — it's used for markdown/docs too)
@@ -42,22 +43,31 @@ export const receiveAgentEvent = mutation({
 				path: v.optional(v.string()),
 			})
 		),
+		tenantId: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
+		const tenantId = args.tenantId;
+
 		// Find existing task by runId
-		let task = await ctx.db
+		let taskQuery = ctx.db
 			.query("tasks")
-			.filter((q) => q.eq(q.field("openclawRunId"), args.runId))
-			.first();
+			.filter((q) => q.eq(q.field("openclawRunId"), args.runId));
+		if (tenantId) {
+			taskQuery = taskQuery.filter((q) => q.eq(q.field("tenantId"), tenantId));
+		}
+		let task = await taskQuery.first();
+		if (task && tenantId && !task.tenantId) {
+			await ctx.db.patch(task._id, { tenantId });
+		}
 
 		// Fallback: find by sessionKey (e.g. "agent:main:mission:<taskId>")
-		if (!task && args.sessionKey) {
+		if (!task && args.sessionKey && tenantId) {
 			const match = args.sessionKey.match(/mission:(.+)$/);
 			if (match) {
 				const taskId = ctx.db.normalizeId("tasks", match[1]);
 				if (taskId) {
 					const candidate = await ctx.db.get(taskId);
-					if (candidate) {
+					if (candidate && candidate.tenantId === tenantId) {
 						task = candidate;
 						// Link the runId for future lookups
 						await ctx.db.patch(task._id, { openclawRunId: args.runId });
@@ -67,10 +77,15 @@ export const receiveAgentEvent = mutation({
 		}
 
 		// Find or create system agent
-		let systemAgent = await ctx.db
+		let systemAgentQuery = ctx.db
 			.query("agents")
-			.filter((q) => q.eq(q.field("name"), SYSTEM_AGENT_NAME))
-			.first();
+			.filter((q) => q.eq(q.field("name"), SYSTEM_AGENT_NAME));
+		if (tenantId) {
+			systemAgentQuery = systemAgentQuery.filter((q) =>
+				q.eq(q.field("tenantId"), tenantId),
+			);
+		}
+		let systemAgent = await systemAgentQuery.first();
 
 		if (!systemAgent) {
 			const agentId = await ctx.db.insert("agents", {
@@ -79,16 +94,23 @@ export const receiveAgentEvent = mutation({
 				status: "active",
 				level: "SPC",
 				avatar: "🤖",
+				tenantId,
 			});
 			systemAgent = await ctx.db.get(agentId);
 		}
 
-		const namedAgent = args.agentId
-			? await ctx.db
-					.query("agents")
-					.filter((q) => q.eq(q.field("name"), args.agentId))
-					.first()
-			: null;
+		let namedAgent: typeof systemAgent | null = null;
+		if (args.agentId) {
+			let namedAgentQuery = ctx.db
+				.query("agents")
+				.filter((q) => q.eq(q.field("name"), args.agentId));
+			if (tenantId) {
+				namedAgentQuery = namedAgentQuery.filter((q) =>
+					q.eq(q.field("tenantId"), tenantId),
+				);
+			}
+			namedAgent = await namedAgentQuery.first();
+		}
 
 		const agent = namedAgent || systemAgent;
 		const now = Date.now();
@@ -110,6 +132,7 @@ export const receiveAgentEvent = mutation({
 					sessionKey: args.sessionKey ?? undefined,
 					openclawRunId: args.runId,
 					startedAt: now,
+					tenantId,
 				});
 
 				if (agent) {
@@ -119,6 +142,7 @@ export const receiveAgentEvent = mutation({
 						fromAgentId: agent._id,
 						content: `🚀 **Started**\n\n${sourcePrefix}${args.prompt || "N/A"}`,
 						attachments: [],
+						tenantId,
 					});
 
 					await ctx.db.insert("activities", {
@@ -126,6 +150,7 @@ export const receiveAgentEvent = mutation({
 						agentId: agent._id,
 						message: `started "${title}"`,
 						targetId: taskId,
+						tenantId,
 					});
 				}
 			} else if (args.prompt && task.title.startsWith("Agent task")) {
@@ -145,6 +170,7 @@ export const receiveAgentEvent = mutation({
 				fromAgentId: agent._id,
 				content: args.message || "Progress update",
 				attachments: [],
+				tenantId,
 			});
 
 			// Flag coding tool usage based on tool:start events
@@ -197,6 +223,7 @@ export const receiveAgentEvent = mutation({
 					fromAgentId: agent._id,
 					content: completionMsg,
 					attachments: [],
+					tenantId,
 				});
 
 				await ctx.db.insert("activities", {
@@ -204,6 +231,7 @@ export const receiveAgentEvent = mutation({
 					agentId: agent._id,
 					message: `${needsFeedback ? "needs input on" : "completed"} "${task.title}" in ${durationStr}`,
 					targetId: task._id,
+					tenantId,
 				});
 			}
 		} else if (args.action === "error" && task) {
@@ -220,6 +248,7 @@ export const receiveAgentEvent = mutation({
 					fromAgentId: agent._id,
 					content: `❌ **Error** after **${durationStr}**\n\n${args.error || "Unknown error"}`,
 					attachments: [],
+					tenantId,
 				});
 
 				await ctx.db.insert("activities", {
@@ -227,6 +256,7 @@ export const receiveAgentEvent = mutation({
 					agentId: agent._id,
 					message: `error on "${task.title}" after ${durationStr}`,
 					targetId: task._id,
+					tenantId,
 				});
 			}
 		} else if (args.action === "document" && args.document && agent) {
@@ -238,6 +268,7 @@ export const receiveAgentEvent = mutation({
 				path: args.document.path,
 				taskId: task?._id,
 				createdByAgentId: agent._id,
+				tenantId,
 			});
 
 			// Add activity for document creation
@@ -251,6 +282,7 @@ export const receiveAgentEvent = mutation({
 				agentId: agent._id,
 				message: activityMsg,
 				targetId: task?._id,
+				tenantId,
 			});
 
 			// If there's an associated task, add a comment about the document
@@ -260,11 +292,73 @@ export const receiveAgentEvent = mutation({
 					fromAgentId: agent._id,
 					content: `📄 Created document: **${args.document.title}**\n\nType: ${args.document.type}${args.document.path ? `\nPath: \`${args.document.path}\`` : ""}`,
 					attachments: [docId],
+					tenantId,
 				});
 			}
 		}
 	},
 });
+
+export const sendTestEvent = mutation({
+	args: {},
+	handler: async (ctx) => {
+		const tenantId = await requireTenantId(ctx);
+		const now = Date.now();
+		const runId = `test-${now}`;
+		const title = "OpenClaw Test Event";
+		const systemAgent = await ensureSystemAgent(ctx, tenantId);
+
+		const taskId = await ctx.db.insert("tasks", {
+			title,
+			description: "Test event created from Mission Control settings.",
+			status: "inbox",
+			assigneeIds: [systemAgent._id],
+			tags: ["openclaw", "test"],
+			openclawRunId: runId,
+			startedAt: now,
+			tenantId,
+		});
+
+		await ctx.db.insert("messages", {
+			taskId,
+			fromAgentId: systemAgent._id,
+			content: "✅ Test event received successfully.",
+			attachments: [],
+			tenantId,
+		});
+
+		await ctx.db.insert("activities", {
+			type: "status_update",
+			agentId: systemAgent._id,
+			message: `sent test event "${title}"`,
+			targetId: taskId,
+			tenantId,
+		});
+
+		return { ok: true };
+	},
+});
+
+// Minimal helper to keep system agent creation consistent.
+async function ensureSystemAgent(ctx: any, tenantId: string) {
+	let agentQuery = ctx.db
+		.query("agents")
+		.filter((q: any) => q.eq(q.field("name"), SYSTEM_AGENT_NAME))
+		.filter((q: any) => q.eq(q.field("tenantId"), tenantId));
+	let agent = await agentQuery.first();
+	if (!agent) {
+		const agentId = await ctx.db.insert("agents", {
+			name: SYSTEM_AGENT_NAME,
+			role: "AI Assistant",
+			status: "active",
+			level: "SPC",
+			avatar: "🤖",
+			tenantId,
+		});
+		agent = await ctx.db.get(agentId);
+	}
+	return agent;
+}
 
 function summarizePrompt(prompt: string): string {
 	const cleaned = prompt.trim();

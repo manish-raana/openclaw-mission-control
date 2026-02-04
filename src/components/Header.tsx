@@ -6,9 +6,16 @@ import { api } from "../../convex/_generated/api";
 type HeaderProps = {
 	onOpenAgents?: () => void;
 	onOpenLiveFeed?: () => void;
+	onOpenSettings?: () => void;
+	isSettingsOpen?: boolean;
 };
 
-const Header: React.FC<HeaderProps> = ({ onOpenAgents, onOpenLiveFeed }) => {
+const Header: React.FC<HeaderProps> = ({
+	onOpenAgents,
+	onOpenLiveFeed,
+	onOpenSettings,
+	isSettingsOpen = false,
+}) => {
 	const [time, setTime] = useState(new Date());
 	
 	// Fetch data for dynamic counts
@@ -90,11 +97,34 @@ const Header: React.FC<HeaderProps> = ({ onOpenAgents, onOpenLiveFeed }) => {
 			<div className="flex items-center gap-2 md:gap-6">
 				<button
 					type="button"
+					className={`hidden md:flex items-center gap-1.5 border-none px-4 py-2 rounded-lg text-sm font-medium cursor-pointer transition-colors ${
+						isSettingsOpen
+							? "bg-[var(--accent-orange)] text-white"
+							: "bg-muted hover:bg-accent text-foreground"
+					}`}
+					onClick={onOpenSettings}
+				>
+					<span className="text-base">⚙️</span> Settings
+				</button>
+				<button
+					type="button"
 					className="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-lg bg-muted hover:bg-accent transition-colors"
 					onClick={onOpenLiveFeed}
 					aria-label="Open live feed sidebar"
 				>
 					<span aria-hidden="true">☰</span>
+				</button>
+				<button
+					type="button"
+					className={`md:hidden inline-flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${
+						isSettingsOpen
+							? "bg-[var(--accent-orange)] text-white"
+							: "bg-muted hover:bg-accent"
+					}`}
+					onClick={onOpenSettings}
+					aria-label="Open settings sidebar"
+				>
+					<span aria-hidden="true">⚙️</span>
 				</button>
 				<div className="text-right">
 					<div className="text-xl font-semibold text-foreground tabular-nums">

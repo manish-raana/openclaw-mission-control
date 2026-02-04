@@ -1,9 +1,16 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { canAccessTenantRecord, getTenantFilter } from "./tenant";
 
 export const listByTask = query({
   args: { taskId: v.id("tasks") },
   handler: async (ctx, args) => {
+    const { tenantId, allowUnscoped } = await getTenantFilter(ctx);
+    const task = await ctx.db.get(args.taskId);
+    if (!task) throw new Error("Task not found");
+    if (!canAccessTenantRecord(task.tenantId, tenantId, allowUnscoped)) {
+      return [];
+    }
     return await ctx.db
       .query("documents")
       .filter((q) => q.eq(q.field("taskId"), args.taskId))
@@ -116,6 +123,17 @@ export const create = mutation({
     messageId: v.optional(v.id("messages")),
   },
   handler: async (ctx, args) => {
+    const { tenantId, allowUnscoped } = await getTenantFilter(ctx);
+    let taskTenantId: string | undefined;
+    if (args.taskId) {
+      const task = await ctx.db.get(args.taskId);
+      if (!task) throw new Error("Task not found");
+      if (!canAccessTenantRecord(task.tenantId, tenantId, allowUnscoped)) {
+        throw new Error("Unauthorized");
+      }
+      taskTenantId = task.tenantId;
+    }
+
     const docId = await ctx.db.insert("documents", {
       title: args.title,
       content: args.content,
@@ -124,6 +142,7 @@ export const create = mutation({
       taskId: args.taskId,
       createdByAgentId: args.agentId,
       messageId: args.messageId,
+      tenantId: taskTenantId,
     });
 
     let message = `created document "${args.title}"`;
@@ -139,6 +158,7 @@ export const create = mutation({
       agentId: args.agentId,
       message: message,
       targetId: args.taskId,
+      tenantId: taskTenantId,
     });
 
     return docId;

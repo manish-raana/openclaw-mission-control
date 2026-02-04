@@ -36,7 +36,8 @@ Add to `~/.openclaw/openclaw.json`:
         "mission-control": {
           "enabled": true,
           "env": {
-            "MISSION_CONTROL_URL": "http://127.0.0.1:3211/openclaw/event"
+            "MISSION_CONTROL_URL": "http://127.0.0.1:3211/openclaw/event",
+            "MISSION_CONTROL_TOKEN": "mc_live_..."
           }
         }
       }
@@ -47,10 +48,14 @@ Add to `~/.openclaw/openclaw.json`:
 
 For production (Convex cloud), use:
 ```json
-"MISSION_CONTROL_URL": "https://your-project.convex.site/openclaw/event"
+{
+  "MISSION_CONTROL_URL": "https://your-project.convex.site/openclaw/event",
+  "MISSION_CONTROL_TOKEN": "mc_live_..."
+}
 ```
 
 Alternatively, set the `MISSION_CONTROL_URL` environment variable (hook config takes priority).
+If your hosted deployment requires auth, set `MISSION_CONTROL_TOKEN` as well.
 
 ## What It Does
 

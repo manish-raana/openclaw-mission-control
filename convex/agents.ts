@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation } from "./_generated/server";
+import { canAccessTenantRecord, getTenantFilter } from "./tenant";
 
 export const updateStatus = mutation({
   args: {
@@ -11,8 +12,12 @@ export const updateStatus = mutation({
     ),
   },
   handler: async (ctx, args) => {
+    const { tenantId, allowUnscoped } = await getTenantFilter(ctx);
     const agent = await ctx.db.get(args.id);
     if (!agent) throw new Error("Agent not found");
+    if (!canAccessTenantRecord(agent.tenantId, tenantId, allowUnscoped)) {
+      throw new Error("Unauthorized");
+    }
 
     await ctx.db.patch(args.id, { status: args.status });
   },
