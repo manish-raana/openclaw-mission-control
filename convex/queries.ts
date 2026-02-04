@@ -11,7 +11,25 @@ export const listAgents = query({
 export const listTasks = query({
 	args: {},
 	handler: async (ctx) => {
-		return await ctx.db.query("tasks").collect();
+		const tasks = await ctx.db.query("tasks").collect();
+
+		// Enrich tasks with last message time
+		const enrichedTasks = await Promise.all(
+			tasks.map(async (task) => {
+				const lastMessage = await ctx.db
+					.query("messages")
+					.filter((q) => q.eq(q.field("taskId"), task._id))
+					.order("desc")
+					.first();
+
+				return {
+					...task,
+					lastMessageTime: lastMessage?._creationTime ?? null,
+				};
+			})
+		);
+
+		return enrichedTasks;
 	},
 });
 

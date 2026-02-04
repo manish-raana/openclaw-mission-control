@@ -4,6 +4,25 @@ import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
 import { IconArchive } from "@tabler/icons-react";
 
+function formatRelativeTime(timestamp: number | null): string {
+	if (!timestamp) return "";
+
+	const now = Date.now();
+	const diff = now - timestamp;
+
+	const seconds = Math.floor(diff / 1000);
+	const minutes = Math.floor(seconds / 60);
+	const hours = Math.floor(minutes / 60);
+	const days = Math.floor(hours / 24);
+
+	if (seconds < 60) return "just now";
+	if (minutes < 60) return `${minutes}m ago`;
+	if (hours < 24) return `${hours}h ago`;
+	if (days < 7) return `${days}d ago`;
+
+	return new Date(timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
 const columns = [
 	{ id: "inbox", label: "INBOX", color: "var(--text-subtle)" },
 	{ id: "assigned", label: "ASSIGNED", color: "var(--accent-orange)" },
@@ -150,9 +169,11 @@ const MissionQueue: React.FC<MissionQueueProps> = ({ selectedTaskId, onSelectTas
 														</span>
 													</div>
 												)}
+												{task.lastMessageTime && (
 												<span className="text-[11px] text-muted-foreground">
-													just now
+													{formatRelativeTime(task.lastMessageTime)}
 												</span>
+											)}
 											</div>
 											<div className="flex flex-wrap gap-1.5">
 												{task.tags.map((tag) => (

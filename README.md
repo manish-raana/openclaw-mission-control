@@ -12,6 +12,7 @@ A real-time, high-performance dashboard for managing autonomous agents and compl
 - 💬 **Comments & Activity**: Comment tracking and a live activity feed with filters for tasks, comments, docs, and status updates.
 - 🔐 **Secure Access**: Integrated Convex Auth for secure terminal login and management.
 - 📱 **Responsive Design**: Premium, centered layout that works seamlessly across all devices.
+- 🔗 **OpenClaw Integration**: Automatic task tracking for OpenClaw agent runs with real-time progress updates.
 
 ## 🛠 Tech Stack
 
@@ -41,6 +42,113 @@ npx convex run seed:run
 1. Open the app in your browser (usually `http://localhost:5173`).
 2. Use the **Sign Up** flow to create your commander credentials.
 3. Access the dashboard to start monitoring operations.
+
+## 🔗 OpenClaw Integration
+
+Mission Control integrates with [OpenClaw](https://github.com/anthropics/openclaw) to automatically track agent tasks in real-time.
+
+### How It Works
+
+```
+OpenClaw Agent → Lifecycle Events → Hook Handler → HTTP POST → Convex → Real-time UI
+```
+
+When an OpenClaw agent runs:
+1. **Task Created** - A new task appears in the "In Progress" column with the user's prompt as the title
+2. **Progress Updates** - Tool usage and thinking events appear as comments
+3. **Completion** - Task moves to "Done" with duration displayed (e.g., "Completed in 2m 15s")
+4. **Errors** - Task moves to "Review" column with error details
+
+### Setup
+
+#### 1. Install the Mission Control Hook
+
+Copy the hook files from this repo to your OpenClaw hooks directory:
+
+```bash
+cp -r hooks/mission-control ~/.openclaw/hooks/mission-control
+```
+
+This installs three files to `~/.openclaw/hooks/mission-control/`:
+- `handler.ts` — Event handler that captures lifecycle, tool, and document events
+- `HOOK.md` — Hook metadata (name, events, description)
+- `README.md` — Detailed setup and troubleshooting guide
+
+#### 2. Configure the Webhook URL
+
+Add the Mission Control URL to your OpenClaw config (`~/.openclaw/openclaw.json`):
+
+For local development, use the Convex local site URL:
+
+```json
+{
+  "hooks": {
+    "internal": {
+      "enabled": true,
+      "entries": {
+        "mission-control": {
+          "enabled": true,
+          "env": {
+            "MISSION_CONTROL_URL": "http://127.0.0.1:3211/openclaw/event"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+For production, use your Convex deployment URL:
+
+```json
+{
+  "MISSION_CONTROL_URL": "https://your-project.convex.site/openclaw/event"
+}
+```
+
+Or set the environment variable:
+
+```bash
+export MISSION_CONTROL_URL="http://127.0.0.1:3211/openclaw/event"
+```
+
+#### 3. Restart OpenClaw Gateway
+
+```bash
+openclaw gateway restart
+```
+
+### Features
+
+| Feature | Description |
+|---------|-------------|
+| **Prompt Capture** | User prompts become task titles and descriptions |
+| **Duration Tracking** | Shows how long each agent run took |
+| **Source Detection** | Messages from Telegram, webchat (Mac UI), Discord, etc. show source prefix |
+| **Document Capture** | Files created by agents (markdown, code, images) are tracked |
+| **Markdown Comments** | Progress updates render with full markdown support |
+| **Agent Matching** | OpenClaw agents map to Mission Control agents by name |
+
+### Webhook Endpoint
+
+The integration receives events at:
+
+```
+POST /openclaw/event
+```
+
+Payload format:
+```json
+{
+  "runId": "unique-run-id",
+  "action": "start" | "end" | "error" | "progress",
+  "sessionKey": "session-key",
+  "prompt": "user prompt text",
+  "source": "Telegram",
+  "response": "agent response",
+  "error": "error message"
+}
+```
 
 ## 📖 Learn More
 

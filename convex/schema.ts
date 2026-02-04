@@ -31,6 +31,9 @@ export default defineSchema({
 		assigneeIds: v.array(v.id("agents")),
 		tags: v.array(v.string()),
 		borderColor: v.optional(v.string()),
+		sessionKey: v.optional(v.string()),
+		openclawRunId: v.optional(v.string()),
+		startedAt: v.optional(v.number()),
 	}),
 	messages: defineTable({
 		taskId: v.id("tasks"),

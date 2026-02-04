@@ -14,6 +14,7 @@ import type * as documents from "../documents.js";
 import type * as fix_loki from "../fix_loki.js";
 import type * as http from "../http.js";
 import type * as messages from "../messages.js";
+import type * as openclaw from "../openclaw.js";
 import type * as queries from "../queries.js";
 import type * as seed from "../seed.js";
 import type * as tasks from "../tasks.js";
@@ -31,6 +32,7 @@ declare const fullApi: ApiFromModules<{
   fix_loki: typeof fix_loki;
   http: typeof http;
   messages: typeof messages;
+  openclaw: typeof openclaw;
   queries: typeof queries;
   seed: typeof seed;
   tasks: typeof tasks;

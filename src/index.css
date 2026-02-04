@@ -244,6 +244,73 @@
 	}
 }
 
+/* Markdown Content Styling */
+.markdown-content p {
+	margin: 0.5em 0;
+}
+
+.markdown-content p:first-child {
+	margin-top: 0;
+}
+
+.markdown-content p:last-child {
+	margin-bottom: 0;
+}
+
+.markdown-content strong {
+	font-weight: 600;
+}
+
+.markdown-content ul,
+.markdown-content ol {
+	margin: 0.5em 0;
+	padding-left: 1.5em;
+}
+
+.markdown-content li {
+	margin: 0.25em 0;
+}
+
+.markdown-content code {
+	background: oklch(0.95 0 0);
+	padding: 0.1em 0.3em;
+	border-radius: 3px;
+	font-size: 0.9em;
+}
+
+.markdown-content pre {
+	background: oklch(0.95 0 0);
+	padding: 0.75em;
+	border-radius: 6px;
+	overflow-x: auto;
+	margin: 0.5em 0;
+}
+
+.markdown-content pre code {
+	background: none;
+	padding: 0;
+}
+
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3 {
+	font-weight: 600;
+	margin: 0.75em 0 0.5em;
+}
+
+.markdown-content h1:first-child,
+.markdown-content h2:first-child,
+.markdown-content h3:first-child {
+	margin-top: 0;
+}
+
+.markdown-content blockquote {
+	border-left: 3px solid oklch(0.8 0 0);
+	padding-left: 1em;
+	margin: 0.5em 0;
+	color: oklch(0.5 0 0);
+}
+
 /* Scrollbar Styling */
 ::-webkit-scrollbar {
 	width: 6px;

@@ -400,7 +400,9 @@ const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ taskId, onClose }) =>
                       <span className="font-semibold text-foreground">{msg.agentName}</span>
                       <span>{formatCreationDate(msg._creationTime)}</span>
                     </div>
-                    <div className="text-sm text-foreground whitespace-pre-wrap">{msg.content}</div>
+                    <div className="text-sm text-foreground markdown-content">
+                      <ReactMarkdown>{msg.content}</ReactMarkdown>
+                    </div>
                     {msg.attachments?.length > 0 && (
                       <div className="flex flex-wrap gap-1.5 pt-1">
                         {msg.attachments.map((attachmentId) => {
