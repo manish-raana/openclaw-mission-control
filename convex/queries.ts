@@ -40,52 +40,37 @@ export const listActivities = query({
 		taskId: v.optional(v.id("tasks")),
 	},
 	handler: async (ctx, args) => {
-		let activitiesQuery = ctx.db.query("activities").order("desc");
+		const allActivities = await ctx.db.query("activities").collect();
+        
+        // Sort descending by creation time (newest first)
+        allActivities.sort((a, b) => b._creationTime - a._creationTime);
 
-		if (args.agentId || args.type || args.taskId) {
-			activitiesQuery = activitiesQuery.filter((q) => {
-				const filters = [];
-				if (args.agentId) filters.push(q.eq(q.field("agentId"), args.agentId));
-				if (args.taskId) filters.push(q.eq(q.field("targetId"), args.taskId));
+        const filtered = allActivities.filter(activity => {
+            if (args.agentId && activity.agentId !== args.agentId) return false;
+            if (args.taskId && activity.targetId !== args.taskId) return false;
+            
+            if (args.type) {
+                if (args.type === "tasks") {
+                    return ["status_update", "assignees_update", "task_update"].includes(activity.type);
+                } else if (args.type === "comments") {
+                    return ["message", "commented"].includes(activity.type);
+                } else if (args.type === "docs") {
+                    return activity.type === "document_created";
+                } else if (args.type === "status") {
+                    return activity.type === "status_update";
+                } else {
+                    return activity.type === args.type;
+                }
+            }
+            return true;
+        });
 
-				if (args.type) {
-                    if (args.type === "tasks") {
-                        // Match any task-related activity
-                        filters.push(
-                            q.or(
-                                q.eq(q.field("type"), "status_update"),
-                                q.eq(q.field("type"), "assignees_update"),
-                                q.eq(q.field("type"), "task_update")
-                            )
-                        );
-                    } else if (args.type === "comments") {
-                         // Match messages/comments
-                        filters.push(
-                            q.or(
-                                q.eq(q.field("type"), "message"),
-                                q.eq(q.field("type"), "commented")
-                            )
-                        );
-                    } else if (args.type === "docs") {
-                        filters.push(q.eq(q.field("type"), "document_created"));
-                    } else if (args.type === "status") {
-                         filters.push(q.eq(q.field("type"), "status_update"));
-                    } else {
-                        // Fallback for exact match
-                        filters.push(q.eq(q.field("type"), args.type));
-                    }
-				}
-
-				return q.and(...filters);
-			});
-		}
-
-		const activities = await activitiesQuery.take(50);
+		const activities = filtered.slice(0, 50);
 
 		// Join with agents to get names for the feed
 		const enrichedFeed = await Promise.all(
 			activities.map(async (activity) => {
-				const agent = await ctx.db.get("agents", activity.agentId);
+				const agent = await ctx.db.get(activity.agentId);
 				return {
 					...activity,
 					agentName: agent?.name ?? "Unknown Agent",

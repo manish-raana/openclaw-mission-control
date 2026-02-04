@@ -17,7 +17,9 @@ const Header: React.FC<HeaderProps> = ({ onOpenAgents, onOpenLiveFeed }) => {
 
 	// Calculate counts
 	const activeAgentsCount = agents ? agents.filter(a => a.status === "active").length : 0;
-	const tasksInQueueCount = tasks ? tasks.filter(t => t.status !== "done").length : 0;
+	const tasksInQueueCount = tasks
+		? tasks.filter((t) => t.status !== "done" && t.status !== "archived").length
+		: 0;
 
 	useEffect(() => {
 		const timer = setInterval(() => setTime(new Date()), 1000);
