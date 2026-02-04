@@ -19,6 +19,7 @@ import type * as http from "../http.js";
 import type * as messages from "../messages.js";
 import type * as openclaw from "../openclaw.js";
 import type * as queries from "../queries.js";
+import type * as rateLimit from "../rateLimit.js";
 import type * as seed from "../seed.js";
 import type * as settings from "../settings.js";
 import type * as tasks from "../tasks.js";
@@ -42,6 +43,7 @@ declare const fullApi: ApiFromModules<{
   messages: typeof messages;
   openclaw: typeof openclaw;
   queries: typeof queries;
+  rateLimit: typeof rateLimit;
   seed: typeof seed;
   settings: typeof settings;
   tasks: typeof tasks;

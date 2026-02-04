@@ -129,6 +129,12 @@ If you host Mission Control and want to require tokens, set:
 export MISSION_CONTROL_AUTH_REQUIRED=true
 ```
 
+To configure webhook rate limiting, set:
+
+```bash
+export MISSION_CONTROL_RATE_LIMIT_PER_MINUTE=60
+```
+
 Local/self-host remains compatible when this flag is not set.
 
 #### 3. Restart OpenClaw Gateway

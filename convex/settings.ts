@@ -23,6 +23,7 @@ export const getTenantSettings = query({
 		if (!tenantId) {
 			return {
 				retentionDays: DEFAULT_RETENTION_DAYS,
+				onboardingCompletedAt: undefined,
 			};
 		}
 
@@ -33,6 +34,7 @@ export const getTenantSettings = query({
 
 		return {
 			retentionDays: settings?.retentionDays ?? DEFAULT_RETENTION_DAYS,
+			onboardingCompletedAt: settings?.onboardingCompletedAt ?? null,
 		};
 	},
 });
@@ -59,6 +61,56 @@ export const updateTenantSettings = mutation({
 				tenantId,
 				retentionDays,
 				createdAt: now,
+				updatedAt: now,
+			});
+		}
+
+		return { ok: true };
+	},
+});
+
+export const markOnboardingComplete = mutation({
+	args: {},
+	handler: async (ctx) => {
+		const tenantId = await requireTenantId(ctx);
+		const now = Date.now();
+		const existing = await ctx.db
+			.query("tenantSettings")
+			.withIndex("by_tenant", (q) => q.eq("tenantId", tenantId))
+			.first();
+
+		if (existing) {
+			await ctx.db.patch(existing._id, {
+				onboardingCompletedAt: now,
+				updatedAt: now,
+			});
+		} else {
+			await ctx.db.insert("tenantSettings", {
+				tenantId,
+				retentionDays: DEFAULT_RETENTION_DAYS,
+				onboardingCompletedAt: now,
+				createdAt: now,
+				updatedAt: now,
+			});
+		}
+
+		return { ok: true };
+	},
+});
+
+export const resetOnboarding = mutation({
+	args: {},
+	handler: async (ctx) => {
+		const tenantId = await requireTenantId(ctx);
+		const now = Date.now();
+		const existing = await ctx.db
+			.query("tenantSettings")
+			.withIndex("by_tenant", (q) => q.eq("tenantId", tenantId))
+			.first();
+
+		if (existing) {
+			await ctx.db.patch(existing._id, {
+				onboardingCompletedAt: undefined,
 				updatedAt: now,
 			});
 		}

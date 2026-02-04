@@ -14,6 +14,13 @@ http.route({
 	method: "POST",
 	handler: httpAction(async (ctx, request) => {
 		const authRequired = process.env.MISSION_CONTROL_AUTH_REQUIRED === "true";
+		const rateLimitPerMinute = Number.parseInt(
+			process.env.MISSION_CONTROL_RATE_LIMIT_PER_MINUTE || "",
+			10,
+		);
+		const limit = Number.isFinite(rateLimitPerMinute) && rateLimitPerMinute > 0
+			? rateLimitPerMinute
+			: 60;
 		const authHeader = request.headers.get("authorization") || "";
 		const bearerPrefix = "Bearer ";
 		let tenantId: string | undefined;
@@ -42,6 +49,19 @@ http.route({
 		if (authRequired && !tenantId) {
 			return new Response(JSON.stringify({ ok: false, error: "Authorization required" }), {
 				status: 401,
+				headers: { "Content-Type": "application/json" },
+			});
+		}
+
+		const rateKey = tenantId ?? "anonymous";
+		const rateCheck = await ctx.runMutation(internal.rateLimit.checkAndIncrement, {
+			tenantId: rateKey,
+			limit,
+			now: Date.now(),
+		});
+		if (!rateCheck.allowed) {
+			return new Response(JSON.stringify({ ok: false, error: "Rate limit exceeded" }), {
+				status: 429,
 				headers: { "Content-Type": "application/json" },
 			});
 		}

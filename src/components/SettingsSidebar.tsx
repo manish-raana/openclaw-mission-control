@@ -47,6 +47,7 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
 	const revokeToken = useMutation(api.apiTokens.revokeApiToken);
 	const updateTenantSettings = useMutation(api.settings.updateTenantSettings);
 	const sendTestEvent = useMutation(api.openclaw.sendTestEvent);
+	const resetOnboarding = useMutation(api.settings.resetOnboarding);
 
 	const [tokenName, setTokenName] = useState("");
 	const [createdToken, setCreatedToken] = useState<CreatedToken | null>(null);
@@ -65,6 +66,8 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
 	const needsWebhookOverride =
 		!import.meta.env.VITE_MISSION_CONTROL_WEBHOOK_URL &&
 		!["localhost", "127.0.0.1"].includes(window.location.hostname);
+	const rateLimitLabel =
+		import.meta.env.VITE_MISSION_CONTROL_RATE_LIMIT_PER_MINUTE || "60";
 	const configSnippet = useMemo(() => {
 		const tokenValue = createdToken?.token ?? "<YOUR_TOKEN>";
 		return JSON.stringify(
@@ -194,6 +197,21 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
 					</div>
 					<div className="mt-3 grid gap-2 text-sm">
 						<div className="flex items-center justify-between">
+							<span className="text-muted-foreground">Onboarding</span>
+							<div className="flex items-center gap-2">
+								<span className="text-[11px] text-muted-foreground">
+									{settings?.onboardingCompletedAt ? "Completed" : "Not completed"}
+								</span>
+								<button
+									type="button"
+									className="text-[11px] font-semibold text-[var(--accent-orange)]"
+									onClick={() => resetOnboarding()}
+								>
+									Show Banner
+								</button>
+							</div>
+						</div>
+						<div className="flex items-center justify-between">
 							<span className="text-muted-foreground">Tenant ID</span>
 							<span className="max-w-[160px] break-all text-right font-mono text-xs text-foreground">
 								{viewer?.tenantId ?? "—"}
@@ -207,17 +225,8 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
 				</section>
 
 				<section className="rounded-xl border border-border bg-white p-4">
-					<div className="flex items-center justify-between">
-						<div className="text-xs font-semibold text-muted-foreground tracking-widest">
-							API TOKENS
-						</div>
-						<button
-							type="button"
-							className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-muted text-foreground border border-border"
-							onClick={handleCreateToken}
-						>
-							New Token
-						</button>
+					<div className="text-xs font-semibold text-muted-foreground tracking-widest">
+						API TOKENS
 					</div>
 
 					<div className="mt-3 flex items-center gap-2">
@@ -331,6 +340,9 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
 					</pre>
 					<div className="mt-2 text-[11px] text-muted-foreground">
 						Webhook URL: <span className="font-mono">{webhookUrl}</span>
+					</div>
+					<div className="mt-2 text-[11px] text-muted-foreground">
+						Rate limit: <span className="font-mono">{rateLimitLabel}</span> req/min
 					</div>
 					{needsWebhookOverride && (
 						<div className="mt-2 text-[11px] text-muted-foreground">
