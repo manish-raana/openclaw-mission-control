@@ -122,6 +122,11 @@ const MissionQueue: React.FC<MissionQueueProps> = ({ selectedTaskId, onSelectTas
 				status: newStatus,
 				agentId: currentUserAgent._id,
 			});
+
+			if (newStatus === "in_progress" && task.status !== "in_progress") {
+				const message = await buildPrompt(task as Task);
+				await triggerAgent(taskId, message);
+			}
 		}
 	};
 

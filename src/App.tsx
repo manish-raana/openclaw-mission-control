@@ -1,8 +1,9 @@
 "use client";
 
-import { Authenticated, Unauthenticated } from "convex/react";
+import { Authenticated, Unauthenticated, useMutation } from "convex/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Id } from "../convex/_generated/dataModel";
+import { api } from "../convex/_generated/api";
 import Header from "./components/Header";
 import AgentsSidebar from "./components/AgentsSidebar";
 import MissionQueue from "./components/MissionQueue";
@@ -45,6 +46,35 @@ export default function App() {
 	const [addTaskPreselectedAgentId, setAddTaskPreselectedAgentId] = useState<string | undefined>(undefined);
 	const [selectedAgentId, setSelectedAgentId] = useState<Id<"agents"> | null>(null);
 	const [showAddAgentModal, setShowAddAgentModal] = useState(false);
+
+	const linkRun = useMutation(api.tasks.linkRun);
+
+	const triggerAgent = useCallback(async (taskId: Id<"tasks">, message: string) => {
+		try {
+			const res = await fetch("/hooks/agent", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					"Authorization": `Bearer ${import.meta.env.VITE_OPENCLAW_HOOK_TOKEN || ""}`,
+				},
+				body: JSON.stringify({
+					message,
+					sessionKey: `mission:${taskId}`,
+					name: "MissionControl",
+					wakeMode: "now",
+				}),
+			});
+
+			if (res.ok) {
+				const data = await res.json();
+				if (data.runId) {
+					await linkRun({ taskId, openclawRunId: data.runId });
+				}
+			}
+		} catch (err) {
+			console.error("[App] Failed to trigger openclaw agent:", err);
+		}
+	}, [linkRun]);
 
 	// Document tray state
 	const [selectedDocumentId, setSelectedDocumentId] = useState<Id<"documents"> | null>(null);
@@ -148,6 +178,7 @@ export default function App() {
 								setAddTaskPreselectedAgentId(undefined);
 								setSelectedTaskId(taskId);
 							}}
+							onTriggerAgent={triggerAgent}
 							initialAssigneeId={addTaskPreselectedAgentId}
 						/>
 					)}

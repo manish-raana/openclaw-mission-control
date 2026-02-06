@@ -483,12 +483,12 @@ const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ taskId, onClose, onPr
                   <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center overflow-hidden shrink-0">
                     {renderAvatar(msg.agentAvatar)}
                   </div>
-                  <div className="flex-1 space-y-1">
+                  <div className="flex-1 min-w-0 space-y-1">
                     <div className="flex items-center justify-between text-[11px] text-muted-foreground">
                       <span className="font-semibold text-foreground">{msg.agentName}</span>
-                      <span>{formatCreationDate(msg._creationTime)}</span>
+                      <span className="shrink-0 ml-2">{formatCreationDate(msg._creationTime)}</span>
                     </div>
-                    <div className="text-sm text-foreground markdown-content">
+                    <div className="text-sm text-foreground markdown-content overflow-hidden break-words">
                       <ReactMarkdown>{msg.content}</ReactMarkdown>
                     </div>
                     {msg.attachments?.length > 0 && (
@@ -498,7 +498,8 @@ const TaskDetailPanel: React.FC<TaskDetailPanelProps> = ({ taskId, onClose, onPr
                           return (
                             <div
                               key={attachmentId}
-                              className="text-[10px] px-2 py-0.5 bg-muted rounded border border-border text-muted-foreground flex items-center gap-1"
+                              onClick={() => doc && onPreviewDocument?.(doc._id as Id<"documents">)}
+                              className="text-[10px] px-2 py-0.5 bg-muted rounded border border-border text-muted-foreground flex items-center gap-1 cursor-pointer hover:bg-[var(--accent-blue)]/10 hover:border-[var(--accent-blue)]/30 transition-colors"
                             >
                               <IconFileText size={10} />
                               <span className="font-medium">{doc?.title || "Attachment"}</span>

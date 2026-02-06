@@ -3,7 +3,7 @@ import { mutation } from "./_generated/server";
 
 const SYSTEM_AGENT_NAME = "OpenClaw";
 // Tools that reliably indicate coding work (write excluded — it's used for markdown/docs too)
-const CODING_TOOLS = ["edit", "exec", "bash", "run", "process"];
+const CODING_TOOLS = ["edit", "bash", "run", "process"];
 
 function formatDuration(ms: number): string {
 	const seconds = Math.floor(ms / 1000);

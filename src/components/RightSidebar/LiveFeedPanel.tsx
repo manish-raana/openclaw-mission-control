@@ -1,7 +1,22 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
+
+function formatRelativeTime(timestamp: number, now: number): string {
+  const diff = now - timestamp;
+  const seconds = Math.floor(diff / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+
+  if (seconds < 60) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  if (days < 7) return `${days}d ago`;
+
+  return new Date(timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
 
 const filters = [
   { id: "all", label: "All" },
@@ -17,6 +32,12 @@ const LiveFeedPanel: React.FC = () => {
   const [selectedAgentId, setSelectedAgentId] = useState<
     Id<"agents"> | undefined
   >(undefined);
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(interval);
+  }, []);
 
   const activities = useQuery(api.queries.listActivities, {
     type: selectedType === "all" ? undefined : selectedType,
@@ -95,7 +116,7 @@ const LiveFeedPanel: React.FC = () => {
               </span>{" "}
               {item.message}
               <div className="text-[10px] text-muted-foreground mt-1">
-                just now
+                {formatRelativeTime(item._creationTime, now)}
               </div>
             </div>
           </div>

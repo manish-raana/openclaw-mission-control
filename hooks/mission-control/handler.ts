@@ -204,37 +204,103 @@ function formatPromptWithSource(prompt: string, source: string | null): string {
 async function findAgentEventsModule(): Promise<{
   onAgentEvent: (listener: (evt: AgentEventPayload) => void) => () => void;
 } | null> {
+  // 1. Check globalThis (legacy)
   const g = globalThis as Record<string, unknown>;
   if (g.__openclawAgentEvents && typeof (g.__openclawAgentEvents as Record<string, unknown>).onAgentEvent === "function") {
     return g.__openclawAgentEvents as { onAgentEvent: (listener: (evt: AgentEventPayload) => void) => () => void };
   }
 
-  const searchPaths = [
-    "/usr/local/lib/node_modules/openclaw/dist/infra/agent-events.js",
-    "/opt/homebrew/lib/node_modules/openclaw/dist/infra/agent-events.js",
-  ];
-
+  // Build list of candidate dist directories
+  const distDirs: string[] = [];
   const mainPath = process.argv[1];
   if (mainPath) {
-    const mainDir = path.dirname(mainPath);
-    searchPaths.unshift(path.join(mainDir, "infra", "agent-events.js"));
-    searchPaths.unshift(path.join(mainDir, "..", "dist", "infra", "agent-events.js"));
+    distDirs.push(path.dirname(mainPath));
+    distDirs.push(path.join(path.dirname(mainPath), "..", "dist"));
   }
-
+  distDirs.push(
+    "/usr/local/lib/node_modules/openclaw/dist",
+    "/opt/homebrew/lib/node_modules/openclaw/dist",
+  );
   const home = os.homedir();
   if (home) {
-    searchPaths.push(path.join(home, ".npm-global", "lib", "node_modules", "openclaw", "dist", "infra", "agent-events.js"));
+    distDirs.push(path.join(home, ".npm-global", "lib", "node_modules", "openclaw", "dist"));
   }
 
-  for (const searchPath of searchPaths) {
+  for (const distDir of distDirs) {
+    if (!fs.existsSync(distDir)) continue;
+
+    // 2. Find the chunk that the gateway entry (index.js) already imported.
+    //    ESM caches modules by URL, so import() of an already-loaded file
+    //    returns the cached instance — no re-execution of side effects.
+    //    The gateway's index.js imports from a reply-*.js or loader-*.js chunk
+    //    that contains both emitAgentEvent and onAgentEvent.
+    //    We find which chunk index.js references, then import that same file.
+    const indexPath = path.join(distDir, "index.js");
     try {
-      if (fs.existsSync(searchPath)) {
-        const module = await import(`file://${searchPath}`);
-        if (typeof module.onAgentEvent === "function") return module;
+      if (fs.existsSync(indexPath)) {
+        const indexSrc = fs.readFileSync(indexPath, "utf-8");
+        // Extract imported chunk filenames from index.js (e.g., reply-XYZ.js, loader-XYZ.js)
+        const importMatches = indexSrc.matchAll(/from\s+["']\.\/([^"']+)["']/g);
+        for (const m of importMatches) {
+          const chunkFile = m[1];
+          const chunkPath = path.join(distDir, chunkFile);
+          if (!fs.existsSync(chunkPath)) continue;
+
+          // Read the chunk and check for agent events functions
+          const fullSrc = fs.readFileSync(chunkPath, "utf-8");
+
+          if (!fullSrc.includes("function emitAgentEvent(")) continue;
+          const exportMatch = fullSrc.match(/export\s*\{([^}]+)\}\s*;?\s*$/);
+          if (!exportMatch) continue;
+
+          const aliasMatch = exportMatch[1].match(/onAgentEvent\s+as\s+(\w+)/);
+          const exportName = aliasMatch ? aliasMatch[1] : "onAgentEvent";
+
+          // import() returns ESM-cached instance — same as what the gateway loaded
+          const mod = await import(`file://${chunkPath}`);
+          const fn = mod[exportName];
+          if (typeof fn === "function") {
+            console.log(`[mission-control] Found onAgentEvent as "${exportName}" in ${chunkFile} (gateway-cached)`);
+            return { onAgentEvent: fn };
+          }
+        }
       }
-    } catch {
-      // Continue
-    }
+    } catch { /* continue */ }
+
+    // 3. Legacy path: infra/agent-events.js (pre-2026.2.x, or PR #9947 merged)
+    const legacyPath = path.join(distDir, "infra", "agent-events.js");
+    try {
+      if (fs.existsSync(legacyPath)) {
+        const mod = await import(`file://${legacyPath}`);
+        if (typeof mod.onAgentEvent === "function") return mod;
+      }
+    } catch { /* continue */ }
+
+    // 4. Fallback: scan loader-*.js chunks (bundled layout)
+    try {
+      const files = fs.readdirSync(distDir).filter(f => (f.startsWith("loader-") || f.startsWith("reply-")) && f.endsWith(".js"));
+      for (const file of files) {
+        const filePath = path.join(distDir, file);
+        try {
+          const src = fs.readFileSync(filePath, "utf-8");
+          if (!src.includes("function onAgentEvent(")) continue;
+          if (!src.includes("function emitAgentEvent(")) continue;
+
+          const exportMatch = src.match(/export\s*\{([^}]+)\}\s*;?\s*$/);
+          if (!exportMatch) continue;
+
+          const aliasMatch = exportMatch[1].match(/onAgentEvent\s+as\s+(\w+)/);
+          const exportName = aliasMatch ? aliasMatch[1] : "onAgentEvent";
+
+          const mod = await import(`file://${filePath}`);
+          const fn = mod[exportName];
+          if (typeof fn === "function") {
+            console.log(`[mission-control] Found onAgentEvent as "${exportName}" in ${file}`);
+            return { onAgentEvent: fn };
+          }
+        } catch { /* continue to next file */ }
+      }
+    } catch { /* continue to next distDir */ }
   }
 
   return null;
@@ -278,6 +344,7 @@ const handler = async (event: HookEvent) => {
       }
 
       agentEvents.onAgentEvent(async (evt: AgentEventPayload) => {
+        try {
         const sessionKey = evt.sessionKey;
         if (!sessionKey) return;
 
@@ -535,6 +602,9 @@ const handler = async (event: HookEvent) => {
         // Log unhandled streams for diagnostics
         if (!["lifecycle", "tool", "exec", "assistant"].includes(evt.stream)) {
           console.log(`[mission-control] Unhandled stream: ${evt.stream}`, JSON.stringify(evt.data).slice(0, 200));
+        }
+        } catch (err) {
+          console.error("[mission-control] Event handler error:", err instanceof Error ? err.message : err);
         }
       });
 

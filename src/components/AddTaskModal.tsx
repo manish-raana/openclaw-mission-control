@@ -25,10 +25,11 @@ const COLOR_SWATCHES = [
 type AddTaskModalProps = {
 	onClose: () => void;
 	onCreated: (taskId: Id<"tasks">) => void;
+	onTriggerAgent?: (taskId: Id<"tasks">, message: string) => Promise<void>;
 	initialAssigneeId?: string;
 };
 
-const AddTaskModal: React.FC<AddTaskModalProps> = ({ onClose, onCreated, initialAssigneeId }) => {
+const AddTaskModal: React.FC<AddTaskModalProps> = ({ onClose, onCreated, onTriggerAgent, initialAssigneeId }) => {
 	const agents = useQuery(api.queries.listAgents);
 	const createTask = useMutation(api.tasks.createTask);
 	const updateAssignees = useMutation(api.tasks.updateAssignees);
@@ -84,6 +85,11 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ onClose, onCreated, initial
 							agentId: agent._id,
 						});
 					}
+				}
+
+				if (status === "in_progress" && onTriggerAgent) {
+					const prompt = description.trim() || title.trim();
+					await onTriggerAgent(taskId, prompt);
 				}
 
 				onCreated(taskId);
