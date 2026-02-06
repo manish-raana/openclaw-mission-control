@@ -63,19 +63,26 @@ When an OpenClaw agent runs:
 
 #### 1. Install the Mission Control Hook
 
-Copy the hook to your OpenClaw hooks directory:
+Use the included installer script:
 
 ```bash
-cp -r ~/.openclaw/hooks/mission-control ~/.openclaw/hooks/
+bash hooks/mission-control/install.sh
 ```
 
-Or create it manually at `~/.openclaw/hooks/mission-control/handler.ts`.
+This copies `handler.ts` to `~/.openclaw/hooks/mission-control/` and creates a backup of any existing handler.
+
+Or copy manually:
+
+```bash
+mkdir -p ~/.openclaw/hooks/mission-control
+cp hooks/mission-control/handler.ts ~/.openclaw/hooks/mission-control/handler.ts
+```
 
 #### 2. Configure the Webhook URL
 
-Add the Mission Control URL to your OpenClaw config (`~/.openclaw/config.jsonc`):
+Add the Mission Control hook entry to your OpenClaw config (`~/.openclaw/openclaw.json`):
 
-```jsonc
+```json
 {
   "hooks": {
     "internal": {
@@ -103,6 +110,41 @@ export MISSION_CONTROL_URL="https://your-project.convex.site/openclaw/event"
 
 ```bash
 openclaw gateway restart
+```
+
+### Compatibility: OpenClaw >= 2026.2.x (tsdown bundling)
+
+> **Temporary notice** — this section covers a workaround needed until [openclaw/openclaw#9947](https://github.com/openclaw/openclaw/pull/9947) is merged upstream.
+
+OpenClaw 2026.2.x migrated its build from `tsc` to `tsdown`, which bundles `agent-events.ts` into a large shared chunk instead of producing a standalone `dist/infra/agent-events.js` file. Importing the bundled chunk directly re-executes all module-level side effects, which crashes the gateway in a respawn loop.
+
+**The handler included in this repo already contains the fix.** It uses ESM module caching to discover and import the gateway's already-loaded chunk — sharing the same `listeners` Set without re-executing side effects.
+
+The discovery strategy (`findAgentEventsModule()` in `handler.ts`) works as follows:
+
+1. Check `globalThis.__openclawAgentEvents` (legacy path)
+2. Parse `dist/index.js` imports, find the chunk containing `emitAgentEvent`, extract the `onAgentEvent` export alias, then `import()` the same file (ESM returns the cached instance)
+3. Check `dist/infra/agent-events.js` (pre-2026.2.x builds, or after PR #9947 is merged)
+4. Fallback: scan `loader-*.js` / `reply-*.js` chunks
+
+**If you prefer to patch OpenClaw directly** instead of relying on the handler workaround, you have two options:
+
+**Option A — Rebuild from the fix branch:**
+```bash
+git clone https://github.com/therealkaiharper-wq/openclaw
+cd openclaw
+git checkout fix/agent-events-entry-point
+pnpm install && pnpm build
+npm install -g .
+openclaw gateway restart
+```
+This restores `dist/infra/agent-events.js` as a standalone entry point. The handler's step 3 will find it automatically.
+
+**Option B — Add the entry point to your local build's `tsdown.config.ts`:**
+
+In the OpenClaw source, add `"src/infra/agent-events.ts"` to the `entry` array in `tsdown.config.ts`, then rebuild:
+```bash
+pnpm build && npm install -g . && openclaw gateway restart
 ```
 
 ### Features
